@@ -4,9 +4,8 @@
   "description": "SIGLAB - Sistema Integrado de Gestão de Laboratórios.",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "minify": "node scripts/minify.mjs",
     "bump-cache-version": "node scripts/bump-cache-version.mjs",
-    "build": "node scripts/minify.mjs && node scripts/bump-cache-version.mjs"
+    "build": "node scripts/bump-cache-version.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"

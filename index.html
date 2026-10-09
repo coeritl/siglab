@@ -1,433 +1,125 @@
 <!doctype html>
 <html lang="pt-BR">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#11733c" />
-    <meta name="description" content="Sistema de chamados dos Laboratórios de Informática do IFMS Campus Três Lagoas" />
-    <title>LabInfo | Suporte IFMS</title>
-    <link rel="stylesheet" href="styles.css?v=3d78a93c00" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#0b6b3a">
+    <meta name="description" content="SIGLAB — consulta e gestão integrada das reservas de laboratórios do IFMS Campus Três Lagoas.">
+    <title>SIGLAB | Gestão de Laboratórios</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="stylesheet" href="styles.css?v=b39c190e51">
+    <link rel="stylesheet" href="siglab.css?v=4417f0f9de">
   </head>
   <body>
-    <header class="topbar">
-      <a class="brand brand-new" href="#" aria-label="LabInfo TL - Suporte, início">
-        <img class="brand-logo" src="assets/labinfo-logo.png" width="168" height="33" style="display:block;width:168px;height:33px;object-fit:contain" alt="LabInfo TL" />
-        <span class="brand-system-name">Suporte</span>
+    <header class="topbar siglab-topbar">
+      <a class="brand siglab-brand" href="./" aria-label="SIGLAB — página inicial">
+        <span class="siglab-symbol" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        <span class="siglab-brand-copy"><strong>SIG<span>LAB</span></strong><small>Gestão de Laboratórios</small></span>
       </a>
-      <button class="admin-link" id="adminToggle" type="button">Área técnica</button>
+      <nav class="siglab-public-nav" aria-label="Navegação principal">
+        <button id="headerScheduleButton" type="button">Agenda</button>
+        <button id="adminToggle" class="admin-link" type="button">Área interna</button>
+      </nav>
+      <div id="adminAccount" class="siglab-account" hidden>
+        <span id="adminIdentity"><strong>Usuário</strong><small>Equipe SIGLAB</small></span>
+        <button id="logoutButton" class="secondary" type="button">Sair</button>
+      </div>
     </header>
 
     <main>
-      <section id="homeView" class="home-view">
-        <div class="home-hero">
-          <img class="home-brand-logo" src="assets/labinfo-logo.png" width="260" height="51" alt="LabInfo TL | Suporte" />
-          <h1>O que você precisa?</h1>
-        </div>
-        <div class="service-choice-grid">
-          <button id="openSupport" class="service-choice card" type="button">
-            <span class="service-choice-icon" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-            </span>
-            <small>APOIO TÉCNICO</small>
-            <strong>Abrir chamado de suporte</strong>
-            <p>Solicite atendimento para computadores, rede, projetores e periféricos.</p>
-            <b>Abrir chamado ›</b>
-          </button>
-          <button id="openLiveChat" class="service-choice card live-chat-choice" type="button">
-            <span class="service-choice-icon" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/></svg>
-            </span>
-            <div class="service-choice-head">
-              <small>ATENDIMENTO IMEDIATO</small>
-              <span id="chatAvailabilityBadge" class="chat-status-badge offline"><i class="status-dot offline"></i> Offline</span>
-            </div>
-            <strong>Chat ao vivo com técnico</strong>
-            <p id="chatAvailabilityDescription">Converse em tempo real com os técnicos de plantão dos laboratórios.</p>
-            <b id="chatAvailabilityAction">Acessar chat ao vivo ›</b>
-          </button>
-          <button id="openReservations" class="service-choice card" type="button">
-            <span class="service-choice-icon" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><circle cx="8" cy="14" r="1"/><circle cx="12" cy="14" r="1"/><circle cx="16" cy="14" r="1"/><circle cx="8" cy="18" r="1"/><circle cx="12" cy="18" r="1"/></svg>
-            </span>
-            <small>LABORATÓRIOS</small>
-            <strong>Ver ou solicitar uma reserva</strong>
-            <p>Consulte a agenda dos laboratórios e solicite horários para suas aulas.</p>
-            <b>Ver agenda ›</b>
-          </button>
-        </div>
-      </section>
-
-      <section id="chatPublicView" class="chat-public-view" hidden>
-        <div class="chat-public-head">
-          <button id="backHomeFromChat" class="secondary" type="button">← Início</button>
-          <div>
-            <span class="eyebrow">SUPORTE EM TEMPO REAL</span>
-            <h1>Chat ao vivo com a equipe de TI</h1>
-            <p>Tire dúvidas e receba orientação rápida diretamente dos técnicos dos laboratórios.</p>
+      <section id="homeView" class="home-view siglab-home">
+        <div class="siglab-hero">
+          <span class="eyebrow">SISTEMA INTEGRADO DE GESTÃO DE LABORATÓRIOS</span>
+          <h1>Encontre um espaço para sua próxima aula.</h1>
+          <p>Consulte a disponibilidade dos laboratórios e envie sua solicitação de reserva em poucos passos.</p>
+          <div class="siglab-hero-actions">
+            <button id="openReservations" class="primary" type="button">Consultar agenda e reservar</button>
+            <button id="homeAdminButton" class="secondary" type="button">Acessar área interna</button>
           </div>
         </div>
-
-        <div id="chatIdentifyCard" class="card chat-identify-card">
-          <div class="section-title">
-            <span>1</span>
-            <div>
-              <h2>Identificação do servidor</h2>
-              <p>O atendimento ao vivo é exclusivo para servidores cadastrados</p>
-            </div>
-          </div>
-          <form id="chatPublicForm">
-            <label>SIAPE
-              <input id="chatSiape" inputmode="numeric" autocomplete="off" placeholder="0000000" required />
-            </label>
-            <p id="chatIdentity" class="field-hint">Digite seu SIAPE para validação automática.</p>
-            <label>Qual é a sua dúvida ou solicitação inicial?
-              <input id="chatSubject" maxlength="140" placeholder="Ex.: Problema com o projetor do Lab 02 ou dúvida de software..." required />
-            </label>
-            <div id="chatAvailabilityWarning" class="chat-warning-banner" hidden>
-              <span class="chat-warning-icon" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
-              </span>
-              <p>Nenhum técnico está online no momento. Você pode aguardar na fila ou <a href="#" id="chatGoToSupport">abrir um chamado convencional</a>.</p>
-            </div>
-            <button id="startChatButton" class="primary" type="submit">Iniciar atendimento ao vivo <span>→</span></button>
-          </form>
-        </div>
-
-        <div id="chatWaitingCard" class="card chat-waiting-card" hidden>
-          <div class="chat-waiting-animation">
-            <div class="waiting-ripple"></div>
-            <span class="waiting-icon" aria-hidden="true">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            </span>
-          </div>
-          <h2>Conectando ao plantão técnico...</h2>
-          <p id="chatWaitingStatus">Sua solicitação foi enviada aos técnicos. Aguarde enquanto um técnico aceita seu chamado.</p>
-          <div class="chat-waiting-meta">
-            <span>Servidor: <strong id="chatWaitingServerName">—</strong></span>
-            <span>Assunto: <em id="chatWaitingSubject">—</em></span>
-          </div>
-          <button id="cancelChatRequest" class="secondary" type="button">Cancelar solicitação</button>
-        </div>
-
-        <div id="chatActiveCard" class="card chat-active-card" hidden>
-          <header class="chat-room-header">
-            <div class="chat-room-profile">
-              <div class="chat-tech-avatar" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              </div>
-              <div>
-                <strong id="chatRoomTechName">Técnico de Plantão</strong>
-                <span class="chat-room-status"><i class="live-dot"></i> Em atendimento</span>
-              </div>
-            </div>
-            <button id="endChatPublicBtn" class="secondary end-chat-btn" type="button">Finalizar chat</button>
-          </header>
-          <div id="chatMessagesList" class="chat-messages-container" aria-live="polite"></div>
-          <form id="chatMessageForm" class="chat-input-bar">
-            <input id="chatMessageInput" type="text" placeholder="Digite sua mensagem e pressione Enter..." autocomplete="off" required />
-            <button id="chatSendMessageBtn" class="primary chat-send-btn" type="submit" aria-label="Enviar mensagem">Enviar →</button>
-          </form>
-        </div>
-
-        <div id="chatEndedCard" class="card chat-ended-card" hidden>
-          <div class="chat-ended-icon" aria-hidden="true">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-          </div>
-          <h2>Atendimento Finalizado</h2>
-          <p>O atendimento foi concluído pela equipe de TI. Enviamos o registro do chamado e o histórico completo da conversa para o seu e-mail institucional.</p>
-          <div class="chat-feedback-notice">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-            <div>
-              <strong>Confirmação enviada por e-mail</strong>
-              <span>Verifique sua caixa de entrada institucional para conferir o resumo do atendimento e confirmar a resolução.</span>
-            </div>
-          </div>
-          <div class="chat-ended-actions">
-            <button id="chatBackToHomeBtn" class="secondary" type="button">Voltar ao início</button>
-            <button id="chatViewMyTicketsBtn" class="primary" type="button">Ver minhas solicitações</button>
-          </div>
+        <div class="siglab-feature-grid" aria-label="Recursos do SIGLAB">
+          <article><span>01</span><strong>Escolha o laboratório</strong><p>Veja os espaços disponibilizados para reserva pela instituição.</p></article>
+          <article><span>02</span><strong>Consulte a agenda</strong><p>Confira a ocupação semanal em um calendário contínuo.</p></article>
+          <article><span>03</span><strong>Solicite o horário</strong><p>Valide a solicitação pelo e-mail institucional e acompanhe a análise.</p></article>
         </div>
       </section>
 
       <section id="reservationsPublicView" class="reservations-public-view" hidden>
-        <div class="reservation-public-head"><button id="backHome" class="secondary" type="button">← Início</button><div><span class="eyebrow">RESERVAS DE LABORATÓRIO</span><h1>Agenda dos laboratórios</h1><p>Consulte a disponibilidade e, quando precisar, abra uma solicitação de reserva.</p></div></div>
+        <div class="reservation-public-head">
+          <button id="backHome" class="secondary" type="button">← Início</button>
+          <div><span class="eyebrow">RESERVAS DE LABORATÓRIO</span><h1>Agenda dos laboratórios</h1><p>Selecione um espaço para consultar a disponibilidade e solicitar uma reserva.</p></div>
+        </div>
         <div id="reservationConfirmation" class="reservation-confirmation card" hidden></div>
         <div id="publicReservationNotice" class="modal-backdrop public-reservation-notice-backdrop" hidden>
           <section class="card public-reservation-notice" role="dialog" aria-modal="true" aria-labelledby="publicReservationNoticeTitle" aria-describedby="publicReservationNoticeMessage">
-            <button id="closePublicReservationNotice" class="modal-close" type="button" aria-label="Fechar aviso">×</button>
+            <button id="closePublicReservationNotice" class="modal-close" type="button" aria-label="Fechar">×</button>
             <span id="publicReservationNoticeIcon" class="public-reservation-notice-icon" aria-hidden="true">!</span>
-            <span id="publicReservationNoticeEyebrow" class="eyebrow">ATENÇÃO</span>
-            <h2 id="publicReservationNoticeTitle">Verifique as informações</h2>
+            <span id="publicReservationNoticeEyebrow" class="eyebrow">AVISO</span>
+            <h2 id="publicReservationNoticeTitle">Atenção</h2>
             <p id="publicReservationNoticeMessage"></p>
             <strong id="publicReservationNoticeProtocol" class="public-reservation-notice-protocol" hidden></strong>
             <button id="confirmPublicReservationNotice" class="primary" type="button">Entendi</button>
           </section>
         </div>
+
+        <section class="card public-lab-picker">
+          <div class="public-lab-picker-head"><span class="eyebrow">ESPAÇOS DISPONÍVEIS</span><h2>Escolha um laboratório</h2><p>O calendário será aberto após a seleção.</p></div>
+          <div id="publicLabCards" class="public-lab-cards"></div>
+        </section>
+
+        <section id="publicScheduleCard" class="card public-schedule-card" hidden>
+          <div class="public-schedule-head"><div><span class="eyebrow">AGENDA DO LABORATÓRIO</span><h2 id="publicScheduleTitle">Grade de reservas</h2><p id="publicScheduleDescription">Consulte os horários ocupados antes de fazer sua solicitação.</p></div><select id="publicScheduleLab" hidden></select></div>
+          <div class="public-week-navigation"><button id="publicSchedulePrev" class="secondary" type="button">← Semana anterior</button><strong id="publicScheduleWeek"></strong><button id="publicScheduleNext" class="secondary" type="button">Próxima semana →</button></div>
+          <div class="public-schedule-scroll"><div id="publicReservationSchedule" class="reservation-calendar public-reservation-calendar"></div></div>
+          <div class="schedule-legend"><span><i class="available"></i>Disponível</span><span><i class="occupied"></i>Reservado</span><span><i class="pending"></i>Em análise</span></div>
+        </section>
+
         <button id="togglePublicReservationForm" class="card reservation-form-toggle" type="button" aria-expanded="false"><span><i>+</i><span><strong>Fazer uma reserva</strong><small>Informe o laboratório, a data e o horário desejados</small></span></span><b>Expandir ↓</b></button>
-        <section class="card public-lab-picker"><div class="public-lab-picker-head"><div><span class="eyebrow">ESCOLHA O ESPAÇO</span><h2>Laboratórios disponíveis</h2><p>Selecione um laboratório para consultar sua agenda e utilizá-lo na solicitação.</p></div></div><div id="publicLabCards" class="public-lab-cards"></div></section>
+
         <div class="reservation-public-grid">
           <form id="publicReservationForm" class="card reservation-form" hidden>
             <div class="section-title"><span>1</span><div><h2>Identificação</h2><p>Somente servidores cadastrados podem solicitar</p></div></div>
             <label>SIAPE<input id="reservationSiape" inputmode="numeric" autocomplete="off" placeholder="0000000" required></label>
             <p id="reservationIdentity" class="field-hint">Digite seu SIAPE para validação.</p>
-            <div class="section-title"><span>2</span><div><h2>Data e laboratório</h2><p>Blocos de aula com 45 minutos</p></div></div>
-            <div id="reservationSelectedLab" class="reservation-selected-lab"><strong>Laboratório</strong><span>Selecione um dos espaços nos cards acima.</span></div><select id="reservationLab" hidden><option value="">Selecione o laboratório</option></select>
+            <div class="section-title"><span>2</span><div><h2>Reserva</h2><p>Preencha os dados da atividade</p></div></div>
+            <div id="reservationSelectedLab" class="reservation-selected-lab"><strong>Laboratório</strong><span>Selecione um dos espaços nos cards acima.</span></div>
+            <select id="reservationLab" hidden><option value="">Selecione o laboratório</option></select>
             <div class="field-row reservation-time-row"><label>Data<input id="reservationDate" type="date" required></label><label>Início<input id="reservationTime" type="time" step="300" required></label><label>Fim<input id="reservationEndTime" type="time" step="300" required></label></div>
             <div class="field-row recurrence-row"><fieldset class="choice-field"><legend>Repetição</legend><input id="reservationRecurrence" type="hidden" value="none"><div class="choice-blocks recurrence-choices" data-choice-for="reservationRecurrence"><button class="choice-block selected" type="button" data-value="none"><strong>Somente nesta data</strong></button><button class="choice-block" type="button" data-value="weekly"><strong>Semanalmente</strong><span>No mesmo dia da semana</span></button></div></fieldset><label id="reservationUntilLabel" hidden>Repetir até<input id="reservationUntil" type="date"></label></div>
-            <div class="section-title"><span>3</span><div><h2>Informações da aula</h2></div></div>
             <label>Disciplina ou atividade<input id="reservationSubject" maxlength="160" placeholder="Ex.: Programação Web" required></label>
             <label>Observações <small>(opcional)</small><textarea id="reservationNotes" rows="3" maxlength="500" placeholder="Turma, software necessário ou outra informação relevante"></textarea></label>
-            <button class="primary" type="submit">Solicitar reserva <span>→</span></button>
+            <button class="primary" type="submit">Solicitar reserva</button>
           </form>
-          <aside class="reservation-side"><section class="card reservation-rules"><h2>Horários dos laboratórios</h2><div><strong>Matutino</strong><span>7h às 12h35</span></div><div><strong>Vespertino</strong><span>13h às 18h35</span></div><div><strong>Noturno</strong><span>18h45 às 22h50</span></div><small>Segunda a sábado • blocos de 45 minutos</small></section><section class="card my-reservations"><h2>Minhas reservas</h2><p>Receba no e-mail institucional um link seguro para consultar reservas futuras e solicitar cancelamentos.</p><div class="protocol-search"><input id="reservationSearchSiape" inputmode="numeric" autocomplete="off" placeholder="Digite seu SIAPE"><button id="searchReservations" type="button">Enviar link</button></div><div id="myReservationsResult"></div></section></aside>
-        </div>
-        <section id="publicScheduleCard" class="card public-schedule-card" hidden><div class="public-schedule-head"><div><span class="eyebrow">AGENDA DO LABORATÓRIO</span><h2 id="publicScheduleTitle">Grade de reservas</h2><p id="publicScheduleDescription">Consulte os horários ocupados antes de fazer sua solicitação.</p></div><select id="publicScheduleLab" hidden></select></div><div class="public-week-navigation"><button id="publicSchedulePrev" class="secondary" type="button">← Semana anterior</button><strong id="publicScheduleWeek"></strong><button id="publicScheduleNext" class="secondary" type="button">Próxima semana →</button></div><div class="public-schedule-scroll"><div id="publicReservationSchedule" class="reservation-calendar public-reservation-calendar"></div></div><div class="schedule-legend"><span><i class="available"></i>Disponível</span><span><i class="occupied"></i>Reservado</span><span><i class="pending"></i>Em análise</span></div></section>
-      </section>
-
-      <section id="teacherView" class="teacher-view" hidden>
-        <div class="hero">
-          <button id="backHomeFromSupport" class="secondary" type="button" style="margin-bottom:18px">← Início</button>
-          <div>
-            <span class="eyebrow">SUPORTE DOS LABORATÓRIOS</span>
-            <h1>Como podemos ajudar?</h1>
-            <p>Solicite apoio técnico em menos de um minuto. Você receberá as atualizações no e-mail institucional.</p>
-          </div>
-        </div>
-
-        <div class="service-note public-service-hours"><strong>Horário de atendimento</strong><span id="serviceHoursText">Segunda a sexta, das 7h às 22h</span></div>
-
-        <div class="teacher-grid">
-          <form id="ticketForm" class="card ticket-form">
-            <div class="section-title"><span>1</span><div><h2>Identificação</h2><p>Confirme seus dados funcionais</p></div></div>
-            <div class="field-row">
-              <label>SIAPE<input id="siape" inputmode="numeric" autocomplete="off" placeholder="0000000" required /></label>
-              <label>E-mail institucional<input id="email" type="email" autocomplete="email" placeholder="nome@ifms.edu.br" required /></label>
-            </div>
-            <div class="section-title"><span>2</span><div><h2>Como podemos ajudar?</h2><p>Conte o que está acontecendo</p></div></div>
-            <label>Categoria<select id="category" required disabled><option value="">Carregando categorias…</option></select></label>
-            <label>Laboratório<select id="lab" required disabled><option value="">Carregando laboratórios…</option></select></label>
-            <label>Descreva o problema<textarea id="description" rows="5" maxlength="800" placeholder="Ex.: O computador 12 não inicia e apresenta uma tela preta..." required></textarea><small class="counter"><span id="charCount">0</span>/800</small></label>
-            <button class="primary" type="submit">Solicitar apoio técnico <span>→</span></button>
-            <p class="privacy">Seus dados serão usados somente para identificação e acompanhamento do atendimento.</p>
-          </form>
-
-          <aside class="side-column">
-            <div class="card status-card">
-              <span class="status-icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></svg>
-              </span>
-              <h2>Minhas solicitações</h2><p>Informe seu SIAPE para acompanhar suas solicitações e o status atual.</p>
-              <div class="protocol-search"><input id="protocolInput" inputmode="numeric" placeholder="Digite seu SIAPE" /><button id="protocolButton" type="button">Buscar</button></div>
-              <div id="protocolResult" class="protocol-result" aria-live="polite"></div>
-            </div>
+          <aside class="reservation-side">
+            <section class="card reservation-rules"><h2>Horários de referência</h2><div><strong>Matutino</strong><span>7h às 12h35</span></div><div><strong>Vespertino</strong><span>13h às 18h35</span></div><div><strong>Noturno</strong><span>18h45 às 22h50</span></div><small>Os horários podem variar conforme o espaço.</small></section>
+            <section class="card my-reservations"><h2>Minhas reservas</h2><p>Receba no e-mail institucional um link seguro para consultar reservas futuras e solicitar cancelamentos.</p><div class="protocol-search"><input id="reservationSearchSiape" inputmode="numeric" autocomplete="off" placeholder="Digite seu SIAPE"><button id="searchReservations" type="button">Enviar link</button></div><div id="myReservationsResult"></div></section>
           </aside>
         </div>
       </section>
 
-      <section id="adminView" class="admin-view" hidden>
+      <section id="adminView" class="admin-view siglab-admin" hidden>
         <div class="admin-heading">
-          <div>
-            <span class="eyebrow">PAINEL TÉCNICO</span>
-            <h1>Central de chamados</h1>
-            <p>Acompanhe, atribua e resolva as solicitações dos laboratórios.</p>
-          </div>
-          <div class="admin-top-controls">
-            <div class="staff-chat-toggle-wrap">
-              <label class="switch-toggle" title="Alternar status do chat ao vivo">
-                <input type="checkbox" id="staffChatToggle" />
-                <span class="toggle-slider"></span>
-              </label>
-              <span id="staffChatToggleLabel" class="chat-toggle-label">Chat: <strong>Offline</strong></span>
-            </div>
-            <button id="newCategory" class="secondary" type="button">+ Nova categoria</button>
-          </div>
+          <div><span class="eyebrow">ÁREA INTERNA</span><h1 id="adminTitle">Reservas dos laboratórios</h1><p id="adminSubtitle">Organize a agenda e analise as solicitações.</p></div>
+          <div class="admin-menu"><button id="adminMenuButton" class="secondary" type="button">Menu ▾</button><div id="adminMenuDropdown" class="menu-dropdown" hidden><button id="reservationsMenuButton" data-section="reservations" type="button">Reservas</button><button data-section="labs" type="button">Laboratórios</button><button data-section="servers" type="button">Servidores</button></div></div>
         </div>
-        <div class="metrics">
-          <article><span class="metric-icon red" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg></span><div><small>Recebido</small><strong>0</strong><em>Aguardando dados</em></div></article>
-          <article><span class="metric-icon amber" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg></span><div><small>Em atendimento</small><strong>0</strong><em>Aguardando dados</em></div></article>
-          <article><span class="metric-icon green" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><div><small>Concluídos no total</small><strong>0</strong><em>Em todo o período</em></div></article>
-          <article><span class="metric-icon blue" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><div><small>Tempo médio</small><strong>—</strong><em>Sem chamados concluídos</em></div></article>
-        </div>
-        <div class="dashboard-grid">
-          <section class="card queue">
-            <div class="queue-head"><div><h2>Fila de atendimento</h2><span>18 chamados encontrados</span></div><div class="filters"><input id="ticketSearch" placeholder="Buscar chamado..." /><select id="statusFilter"><option>Todos os status</option><option>Recebido</option><option>Em atendimento</option><option>Concluído</option></select></div></div>
-            <div id="ticketList" class="ticket-list"></div>
-          </section>
-          <aside id="ticketDetail" class="card ticket-detail"></aside>
-        </div>
+        <section class="metrics siglab-admin-metrics" aria-label="Resumo das reservas"></section>
+        <section id="labsSection" class="admin-section siglab-registry-section" hidden></section>
+        <section id="serversSection" class="admin-section siglab-registry-section" hidden></section>
       </section>
     </main>
 
-    <!-- Notificação em Destaque de Atendimento ao Vivo para o Técnico (Modal de Alta Visibilidade) -->
-    <div id="incomingChatAlert" class="modal-backdrop incoming-chat-backdrop" hidden>
-      <div class="card incoming-chat-modal" role="dialog" aria-modal="true" aria-labelledby="incomingChatHeading">
-        <div class="incoming-chat-top-badge">
-          <span class="live-dot-pulse"></span>
-          <span>NOVA SOLICITAÇÃO AO VIVO</span>
-        </div>
-        <div class="incoming-chat-radar">
-          <div class="radar-pulse"></div>
-          <div class="incoming-chat-bell-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-          </div>
-        </div>
-        <div class="incoming-chat-body">
-          <h2 id="incomingChatHeading">Servidor aguardando atendimento!</h2>
-          <p class="incoming-chat-subtitle">Um docente ou servidor entrou no chat e está aguardando você na fila.</p>
-
-          <div class="incoming-chat-details-card">
-            <div class="incoming-chat-server-row">
-              <div class="incoming-chat-server-avatar">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
-              </div>
-              <div class="incoming-chat-server-meta">
-                <strong id="incomingChatServerName">Prof. Nome do Servidor</strong>
-                <span id="incomingChatServerSiape">SIAPE: 0000000 • email@ifms.edu.br</span>
-              </div>
-            </div>
-            <div class="incoming-chat-subject-box">
-              <small>ASSUNTO / DÚVIDA INFORMADA</small>
-              <p id="incomingChatSubjectText">Assunto da dúvida informada pelo servidor...</p>
-            </div>
-          </div>
-
-          <div class="incoming-chat-actions">
-            <button id="acceptIncomingChatBtn" class="primary accept-chat-hero-btn" type="button">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/></svg>
-              Atender agora
-            </button>
-            <button id="dismissIncomingChatBtn" class="secondary dismiss-chat-btn" type="button">Atender mais tarde</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Notificação em Destaque de Novo Chamado na Caixa para o Técnico (Modal de Tela Cheia) -->
-    <div id="incomingTicketAlert" class="modal-backdrop incoming-ticket-backdrop" hidden>
-      <div class="card incoming-ticket-modal" role="dialog" aria-modal="true" aria-labelledby="incomingTicketHeading">
-        <div class="incoming-ticket-top-badge">
-          <span class="live-dot-pulse-blue"></span>
-          <span>NOVO CHAMADO NA FILA</span>
-        </div>
-        <div class="incoming-ticket-radar">
-          <div class="radar-pulse-blue"></div>
-          <div class="incoming-ticket-icon-box">
-            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-          </div>
-        </div>
-        <div class="incoming-ticket-body">
-          <h2 id="incomingTicketHeading">Novo chamado aberto no sistema!</h2>
-          <p class="incoming-ticket-subtitle">Uma nova solicitação de suporte técnico acabou de entrar na fila de atendimento.</p>
-
-          <div class="incoming-ticket-details-card">
-            <div class="incoming-ticket-header-row">
-              <span id="incomingTicketProtocolBadge" class="ticket-protocol-badge">LAB-00000</span>
-              <span id="incomingTicketCategoryBadge" class="ticket-cat-badge">Categoria</span>
-            </div>
-
-            <div class="incoming-ticket-server-row">
-              <div class="incoming-ticket-server-avatar">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              </div>
-              <div class="incoming-ticket-server-meta">
-                <strong id="incomingTicketServerName">Prof. Nome do Solicitante</strong>
-                <span id="incomingTicketServerDetails">SIAPE: 0000000 • LabInfo 01</span>
-              </div>
-            </div>
-
-            <div class="incoming-ticket-problem-box">
-              <strong id="incomingTicketTitle">Título do chamado</strong>
-              <p id="incomingTicketDescription">Descrição detalhada do problema...</p>
-            </div>
-          </div>
-
-          <div class="incoming-ticket-actions">
-            <button id="viewIncomingTicketBtn" class="primary view-ticket-hero-btn" type="button">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></svg>
-              Visualizar chamado
-            </button>
-            <button id="dismissIncomingTicketBtn" class="secondary dismiss-ticket-btn" type="button">Entendido (OK)</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal / Drawer do Chat no Painel Técnico -->
-    <div id="adminChatModal" class="modal-backdrop" hidden>
-      <div class="card admin-chat-modal" role="dialog" aria-modal="true" aria-labelledby="adminChatModalTitle">
-        <header class="modal-heading admin-chat-modal-head">
-          <div class="admin-chat-user-info">
-            <div class="admin-chat-avatar" aria-hidden="true">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
-            </div>
-            <div>
-              <span class="eyebrow">ATENDIMENTO AO VIVO</span>
-              <h2 id="adminChatModalTitle">Atendimento com Servidor</h2>
-              <p id="adminChatServerMeta">SIAPE: 0000000 • email@ifms.edu.br</p>
-            </div>
-          </div>
-          <div class="admin-chat-head-actions">
-            <button id="adminFinishChatBtn" class="primary finish-ticket-btn" type="button">Finalizar e Gerar Chamado</button>
-            <button id="closeAdminChatModal" class="modal-close" type="button" aria-label="Minimizar">×</button>
-          </div>
-        </header>
-        <div id="adminChatMessagesList" class="chat-messages-container admin-chat-messages-container"></div>
-        <form id="adminChatMessageForm" class="chat-input-bar admin-chat-input-bar">
-          <input id="adminChatMessageInput" type="text" placeholder="Digite sua resposta para o servidor..." autocomplete="off" required />
-          <button class="primary chat-send-btn" type="submit">Enviar →</button>
-        </form>
-      </div>
-    </div>
-
-    <!-- Modal: Gerar Chamado Oficial a partir do Chat -->
-    <div id="chatToTicketModal" class="modal-backdrop" hidden>
-      <div class="card admin-ticket-modal chat-to-ticket-card" role="dialog" aria-modal="true" aria-labelledby="chatTicketModalTitle">
-        <div class="modal-heading">
-          <div>
-            <span class="eyebrow">REGISTRO DE CHAMADO</span>
-            <h2 id="chatTicketModalTitle">Gerar Chamado do Atendimento</h2>
-            <p>Confirme os dados para formalizar o protocolo e notificar o servidor.</p>
-          </div>
-          <button id="closeChatToTicketModal" class="modal-close" type="button" aria-label="Fechar">×</button>
-        </div>
-        <form id="chatToTicketForm">
-          <div class="field-row">
-            <label>Laboratório relacionado
-              <select id="chatTicketLab" required></select>
-            </label>
-            <label>Categoria do problema
-              <select id="chatTicketCategory" required></select>
-            </label>
-          </div>
-          <label>Título do chamado
-            <input id="chatTicketTitle" maxlength="100" placeholder="Ex.: Atendimento via Chat: Dúvida sobre software" required />
-          </label>
-          <label>Situação do chamado
-            <select id="chatTicketStatus" required>
-              <option value="Concluído">Concluir imediatamente (Dúvida sanada / Atendimento resolvido)</option>
-              <option value="Em atendimento">Manter em atendimento (Exige visita técnica presencial)</option>
-            </select>
-          </label>
-          <label id="chatTicketResolutionLabel">Solução realizada ou orientações passadas
-            <textarea id="chatTicketResolution" rows="3" placeholder="Descreva a solução prestada no chat para registro oficial no chamado..." required></textarea>
-          </label>
-          <label>Transcrição do diálogo (gerada automaticamente)
-            <textarea id="chatTicketTranscript" rows="6" readonly class="chat-transcript-preview"></textarea>
-          </label>
-          <div class="modal-actions">
-            <button id="cancelChatToTicket" class="secondary" type="button">Voltar ao chat</button>
-            <button class="primary" type="submit">Confirmar e gerar protocolo →</button>
-          </div>
-        </form>
+    <div id="loginModal" class="modal-backdrop" hidden>
+      <div class="card login-card siglab-login-card" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+        <div class="modal-heading"><div><span class="eyebrow">ACESSO RESTRITO</span><h2 id="loginTitle">Entrar na área interna</h2><p>Use as credenciais da equipe responsável pelos laboratórios.</p></div><button id="closeLogin" class="modal-close" type="button" aria-label="Fechar">×</button></div>
+        <form id="loginForm"><label>E-mail<input id="loginEmail" type="email" autocomplete="username" required></label><label>Senha<input id="loginPassword" type="password" autocomplete="current-password" required></label><p id="loginError" class="login-error" role="alert"></p><button class="primary" type="submit">Entrar</button></form>
       </div>
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <footer><span>SISLAB - Sistema Integrado de Gestão dos Laboratórios de Informática - TL</span></footer>
+    <footer><span>SIGLAB — Sistema Integrado de Gestão de Laboratórios</span><small>IFMS Campus Três Lagoas</small></footer>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-config.js?v=47db6e4b69"></script>
-    <script src="app.js?v=a35d215ed1"></script>
-    <script src="supabase-integration.js?v=e9344e656c"></script>
-<script src="reservations.js?v=c369d24cea"></script>
+    <script src="supabase-config.js?v=e0479ec3e8"></script>
+    <script src="siglab-app.js?v=557793741a"></script>
+    <script src="reservations.js?v=2c7e59ae5b"></script>
   </body>
 </html>

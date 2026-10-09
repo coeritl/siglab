@@ -1,39 +1,15 @@
-name: Build de assets estáticos (minificação + cache-busting)
-
-# Achado P2 3.3 da auditoria de 26/08/2026 (cache-busting automatizado, feito
-# em 26/08/2026; minificação, item de baixa prioridade do mesmo achado,
-# endereçada a pedido em 26/08/2026). Antes disso o "?v=" dos scripts em
-# index.html era atualizado manualmente a cada deploy, e os arquivos eram
-# servidos sem minificação.
-#
-# Este workflow roda sempre que um dos arquivos-fonte muda em um push para
-# main:
-#   1. scripts/minify.mjs gera app.min.js, supabase-integration.min.js,
-#      reservations.min.js e styles.min.css (só remove espaços/comentários —
-#      ver comentário no topo do script sobre por que não renomeia
-#      identificadores).
-#   2. scripts/bump-cache-version.mjs atualiza o "?v=" desses arquivos em
-#      index.html com um hash do conteúdo.
-# e faz commit do resultado de volta na própria branch. O GitHub Pages
-# continua publicando os arquivos estáticos como estão, sem nenhum passo de
-# build do lado dele — o "build" acontece aqui e o resultado já commitado é
-# o que é servido.
-#
-# Desenvolvimento continua sendo feito editando os arquivos-fonte
-# (app.js, supabase-integration.js, reservations.js, styles.css) — os
-# `.min.` são sempre gerados, nunca editados à mão.
+name: Atualizar cache dos assets estáticos
 
 on:
   push:
     branches: [main]
     paths:
       - 'styles.css'
-      - 'app.js'
-      - 'supabase-integration.js'
+      - 'siglab.css'
+      - 'siglab-app.js'
       - 'reservations.js'
       - 'supabase-config.js'
       - 'scripts/bump-cache-version.mjs'
-      - 'scripts/minify.mjs'
 
 permissions:
   contents: write
@@ -54,23 +30,17 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Instalar esbuild (só usado neste build, não vai para o site)
-        run: npm ci
-
-      - name: Gerar arquivos minificados
-        run: node scripts/minify.mjs
-
-      - name: Atualizar hashes de cache em index.html
+      - name: Atualizar hashes de cache no HTML
         run: node scripts/bump-cache-version.mjs
 
       - name: Commit se houver mudança
         run: |
-          if git diff --quiet -- index.html app.min.js supabase-integration.min.js reservations.min.js styles.min.css; then
+          if git diff --quiet -- index.html; then
             echo "Nada mudou, nada para commitar."
             exit 0
           fi
           git config user.name "siglab-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add index.html app.min.js supabase-integration.min.js reservations.min.js styles.min.css
-          git commit -m "chore: atualiza build (minificação + cache-busting) [skip ci]"
+          git add index.html
+          git commit -m "chore: atualiza cache dos assets [skip ci]"
           git push

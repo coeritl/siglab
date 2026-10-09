@@ -1,5 +1,5 @@
 (()=>{
-  const getDb=()=>window.labinfoDb||window.supabaseClient;
+  const getDb=()=>window.siglabDb||window.labinfoDb||window.supabaseClient;
   const sb=new Proxy({},{
     get(target,prop){
       const client=getDb();
@@ -26,7 +26,7 @@
   // Expor uma promessa impede que ele tente abrir uma seção que ainda não existe.
   var resolveReservationsModuleReady=null;
   window.labinfoReservationsReady=new Promise(resolve=>{resolveReservationsModuleReady=resolve});
-  const siteBase=location.hostname.endsWith('.github.io')?'/labinfo':'';
+  const siteBase=location.hostname.endsWith('.github.io')?'/siglab':'';
   const sitePath=route=>`${siteBase}/${route?String(route).replace(/^\/+|\/+$/g,'')+'/':''}`;
   function localIso(date,time){return new Date(`${date}T${time}:00-04:00`).toISOString()}
   function localDate(value){return new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Cuiaba',dateStyle:'short'}).format(new Date(value))}
@@ -100,10 +100,8 @@
     document.body.classList.remove('admin-route');
     if($('#homeView'))$('#homeView').hidden=view!=='home';
     if($('#reservationsPublicView'))$('#reservationsPublicView').hidden=view!=='reservations';
-    if($('#teacherView'))$('#teacherView').hidden=view!=='support';
-    const chatView=$('#chatPublicView');if(chatView)chatView.hidden=view!=='chat';
     if($('#adminView'))$('#adminView').hidden=true;
-    if(push)history.pushState({},'',view==='home'?sitePath(''):view==='reservations'?sitePath('reservas'):view==='chat'?sitePath('chat'):sitePath('suporte'));
+    if(push)history.pushState({},'',view==='reservations'?sitePath('reservas'):sitePath(''));
     window.scrollTo(0,0);
     if(view==='reservations'&&publicLabs.length===0){
       loadPublicLabs();
@@ -114,10 +112,7 @@
   // Delegação global de navegação no documento inteiro
   document.addEventListener('click',event=>{
     if(event.target.closest('#openReservations')){event.preventDefault();showPublic('reservations');return}
-    if(event.target.closest('#openSupport')){event.preventDefault();showPublic('support');return}
-    if(event.target.closest('#openLiveChat')){event.preventDefault();showPublic('chat');return}
-    if(event.target.closest('#backHome, #backHomeFromChat, #backHomeFromSupport')){event.preventDefault();showPublic('home');return}
-    if(event.target.closest('#chatGoToSupport')){event.preventDefault();showPublic('support');return}
+    if(event.target.closest('#backHome')){event.preventDefault();showPublic('home');return}
     if(event.target.closest('#reservationsMenuButton, [data-section="reservations"], #reviewReservationsButton')){
       event.preventDefault();
       openReservationsAdmin();
@@ -130,8 +125,8 @@
     }
   });
 
-  window.addEventListener('popstate',()=>{const path=location.pathname,isAdmin=path.includes('/admin');if(!isAdmin&&path.includes('/reservas'))showPublic('reservations',false);else if(!isAdmin&&path.includes('/chat'))showPublic('chat',false);else if(!isAdmin&&path.includes('/suporte'))showPublic('support',false);else if(!isAdmin)showPublic('home',false)});
-  const initialParams=new URLSearchParams(location.search),initialPublicRoute=initialParams.get('route'),initialIsAdmin=initialPublicRoute?.startsWith('admin')||location.pathname.includes('/admin');if(!initialIsAdmin&&(location.pathname.includes('/reservas')||initialPublicRoute==='reservas'||initialParams.has('confirm_reservation')||initialParams.has('cancel_reservation')||initialParams.has('manage_reservations')||initialParams.has('confirm_cancel_request')))showPublic('reservations',false);else if(!initialIsAdmin&&(location.pathname.includes('/chat')||initialPublicRoute==='chat'))showPublic('chat',false);else if(!initialIsAdmin&&(location.pathname.includes('/suporte')||initialPublicRoute==='suporte'||initialParams.has('feedback')))showPublic('support',false);
+  window.addEventListener('popstate',()=>{const path=location.pathname,isAdmin=path.includes('/admin');if(!isAdmin&&path.includes('/reservas'))showPublic('reservations',false);else if(!isAdmin)showPublic('home',false)});
+  const initialParams=new URLSearchParams(location.search),initialPublicRoute=initialParams.get('route'),initialIsAdmin=initialPublicRoute?.startsWith('admin')||location.pathname.includes('/admin');if(!initialIsAdmin&&(location.pathname.includes('/reservas')||initialPublicRoute==='reservas'||initialParams.has('confirm_reservation')||initialParams.has('cancel_reservation')||initialParams.has('manage_reservations')||initialParams.has('confirm_cancel_request')))showPublic('reservations',false);
 
   function publicMonday(value){const date=new Date(value);date.setHours(12,0,0,0);const day=date.getDay()||7;date.setDate(date.getDate()-day+1);return date}
   const publicIsoDate=date=>date.toLocaleDateString('en-CA',{timeZone:'America/Cuiaba'}),publicAddDays=(date,days)=>{const copy=new Date(date);copy.setDate(copy.getDate()+days);return copy};
@@ -179,20 +174,45 @@
       setTimeout(()=>$('#publicScheduleCard').scrollIntoView({behavior:'smooth',block:'start'}),50);
     });
   }
-  async function loadPublicLabs(){const {data,error}=await sb.from('labs').select('id,name,code,location,computer_count,operating_system').eq('active',true).eq('reservation_enabled',true).order('name');if(error)return;publicLabs=data||[];const options=publicLabs.map(lab=>`<option value="${lab.id}">${safe(lab.name)}</option>`).join('');$('#reservationLab').innerHTML='<option value="">Selecione o laboratório</option>'+options;$('#publicScheduleLab').innerHTML='<option value=""></option>'+options;renderPublicLabCards()}
+  async function loadPublicLabs(){
+    if(!getDb()){
+      publicLabs=[
+        {id:'demo-info-1',name:'Laboratório de Informática 1',code:'INFO-01',location:'Bloco de laboratórios',computer_count:30,operating_system:'A definir'},
+        {id:'demo-info-2',name:'Laboratório de Informática 2',code:'INFO-02',location:'Bloco de laboratórios',computer_count:30,operating_system:'A definir'},
+        {id:'demo-hardware',name:'Laboratório de Hardware',code:'HARD-01',location:'Bloco de laboratórios',computer_count:20,operating_system:'Uso especializado'}
+      ];
+    }else{
+      const {data,error}=await sb.from('labs').select('id,name,code,location,computer_count,operating_system').eq('active',true).eq('reservation_enabled',true).order('name');
+      if(error){toast(error.message);return}
+      publicLabs=data||[];
+    }
+    const options=publicLabs.map(lab=>`<option value="${lab.id}">${safe(lab.name)}</option>`).join('');
+    $('#reservationLab').innerHTML='<option value="">Selecione o laboratório</option>'+options;
+    $('#publicScheduleLab').innerHTML='<option value=""></option>'+options;
+    renderPublicLabCards();
+  }
   async function loadPublicSchedule(){
     const lab=$('#publicScheduleLab').value||publicLabs[0]?.id;
     if(!lab)return;
     $('#publicScheduleLab').value=lab;
     const days=Array.from({length:6},(_,index)=>publicAddDays(publicWeekStart,index)),
           from=publicIsoDate(days[0]),
-          to=publicIsoDate(days[5]),
-          {data,error}=await sb.rpc('public_reservation_schedule',{p_lab:lab,p_from:from,p_to:to});
+          to=publicIsoDate(days[5]);
+    if(!getDb()){
+      publicScheduleRows=[];
+      renderPublicSchedule(days);
+      return;
+    }
+    const {data,error}=await sb.rpc('public_reservation_schedule',{p_lab:lab,p_from:from,p_to:to});
     if(error){
       $('#publicReservationSchedule').innerHTML=`<p class="empty error-text">${safe(error.message)}</p>`;
       return;
     }
     publicScheduleRows=data||[];
+    renderPublicSchedule(days);
+  }
+
+  function renderPublicSchedule(days){
     const dayIsoStrings=days.map(publicIsoDate);
 
     const preparedRows=[];
@@ -271,10 +291,10 @@
   $('#confirmPublicReservationNotice').onclick=closePublicReservationNotice;
   publicNotice.addEventListener('click',event=>{if(event.target===publicNotice)closePublicReservationNotice()});
   let identityTimer;
-  $('#reservationSiape').oninput=()=>{clearTimeout(identityTimer);publicServer=null;$('#reservationIdentity').textContent='Validando cadastro…';identityTimer=setTimeout(async()=>{const siape=$('#reservationSiape').value.trim();if(siape.length<5){$('#reservationIdentity').textContent='Digite seu SIAPE para validação.';return}const {data,error}=await sb.rpc('identify_server',{p_siape:siape});publicServer=data?.[0]||null;$('#reservationIdentity').textContent=error||!publicServer?'Servidor não localizado ou cadastro inativo.':`${publicServer.full_name} • ${publicServer.email}`;$('#reservationIdentity').className='field-hint '+(publicServer?'found':'pending')},350)};
+  $('#reservationSiape').oninput=()=>{clearTimeout(identityTimer);publicServer=null;if(!getDb()){$('#reservationIdentity').textContent='A validação será liberada após a configuração do banco do SIGLAB.';return}$('#reservationIdentity').textContent='Validando cadastro…';identityTimer=setTimeout(async()=>{const siape=$('#reservationSiape').value.trim();if(siape.length<5){$('#reservationIdentity').textContent='Digite seu SIAPE para validação.';return}const {data,error}=await sb.rpc('identify_server',{p_siape:siape});publicServer=data?.[0]||null;$('#reservationIdentity').textContent=error||!publicServer?'Servidor não localizado ou cadastro inativo.':`${publicServer.full_name} • ${publicServer.email}`;$('#reservationIdentity').className='field-hint '+(publicServer?'found':'pending')},350)};
   $('#reservationDate').onchange=()=>{const date=new Date($('#reservationDate').value+'T12:00:00');if(date.getDay()===0){$('#reservationDate').value='';toast('Os laboratórios não recebem reservas aos domingos.')}};
   const selectPublicRecurrence=setupChoiceGroup('reservationRecurrence');$('#reservationRecurrence').onchange=()=>{const weekly=$('#reservationRecurrence').value==='weekly';$('#reservationUntilLabel').hidden=!weekly;$('#reservationUntil').required=weekly;$('#reservationUntil').min=$('#reservationDate').value};
-  $('#publicReservationForm').onsubmit=async event=>{event.preventDefault();if(!$('#reservationLab').value)return toast('Selecione um laboratório nos cards acima.');if(!publicServer)return toast('Valide um SIAPE cadastrado antes de continuar.');const startMinutes=timeMinutes($('#reservationTime').value),endMinutes=timeMinutes($('#reservationEndTime').value),duration=endMinutes-startMinutes;if(!Number.isFinite(duration)||duration<=0)return toast('O horário final deve ser posterior ao horário inicial.');if(duration<45||duration>360)return toast('A reserva deve ter entre 45 minutos e 6 horas.');const button=event.submitter;button.disabled=true;button.textContent='Registrando solicitação…';try{const recurrence=$('#reservationRecurrence').value,date=$('#reservationDate').value,{data,error}=await sb.rpc('create_public_reservation_range',{p_siape:$('#reservationSiape').value.trim(),p_lab:$('#reservationLab').value,p_subject:$('#reservationSubject').value.trim(),p_start:localIso(date,$('#reservationTime').value),p_end:localIso(date,$('#reservationEndTime').value),p_notes:$('#reservationNotes').value.trim()||null,p_recurrence:recurrence,p_until:recurrence==='weekly'?$('#reservationUntil').value:null});if(error)throw error;const protocol=data?.[0]?.protocol||'',selectedLab=$('#reservationLab').value;event.target.reset();$('#reservationLab').value=selectedLab;selectPublicRecurrence('none');$('#reservationUntilLabel').hidden=true;publicServer=null;$('#reservationIdentity').textContent='Digite seu SIAPE para validação.';showPublicReservationNotice({type:'success',eyebrow:'PEDIDO REGISTRADO',title:'Confirme sua reserva no e-mail',message:'Enviamos uma mensagem para o seu e-mail institucional. Abra essa mensagem e clique em “Confirmar reserva”. Somente depois dessa confirmação o pedido será encaminhado para aprovação da equipe técnica.',protocol})}catch(error){
+  $('#publicReservationForm').onsubmit=async event=>{event.preventDefault();if(!getDb())return toast('O banco exclusivo do SIGLAB ainda não foi configurado.');if(!$('#reservationLab').value)return toast('Selecione um laboratório nos cards acima.');if(!publicServer)return toast('Valide um SIAPE cadastrado antes de continuar.');const startMinutes=timeMinutes($('#reservationTime').value),endMinutes=timeMinutes($('#reservationEndTime').value),duration=endMinutes-startMinutes;if(!Number.isFinite(duration)||duration<=0)return toast('O horário final deve ser posterior ao horário inicial.');if(duration<45||duration>360)return toast('A reserva deve ter entre 45 minutos e 6 horas.');const button=event.submitter;button.disabled=true;button.textContent='Registrando solicitação…';try{const recurrence=$('#reservationRecurrence').value,date=$('#reservationDate').value,{data,error}=await sb.rpc('create_public_reservation_range',{p_siape:$('#reservationSiape').value.trim(),p_lab:$('#reservationLab').value,p_subject:$('#reservationSubject').value.trim(),p_start:localIso(date,$('#reservationTime').value),p_end:localIso(date,$('#reservationEndTime').value),p_notes:$('#reservationNotes').value.trim()||null,p_recurrence:recurrence,p_until:recurrence==='weekly'?$('#reservationUntil').value:null});if(error)throw error;const protocol=data?.[0]?.protocol||'',selectedLab=$('#reservationLab').value;event.target.reset();$('#reservationLab').value=selectedLab;selectPublicRecurrence('none');$('#reservationUntilLabel').hidden=true;publicServer=null;$('#reservationIdentity').textContent='Digite seu SIAPE para validação.';showPublicReservationNotice({type:'success',eyebrow:'PEDIDO REGISTRADO',title:'Confirme sua reserva no e-mail',message:'Enviamos uma mensagem para o seu e-mail institucional. Abra essa mensagem e clique em “Confirmar reserva”. Somente depois dessa confirmação o pedido será encaminhado para aprovação da equipe técnica.',protocol})}catch(error){
       const message = error?.message || 'Não foi possível solicitar a reserva.';
       const isPastDate = /passado/i.test(message);
       const isConflict = /ocupad|indispon|conflit|sobrepos/i.test(message) && !isPastDate;
@@ -294,6 +314,7 @@
     }finally{button.disabled=false;button.innerHTML='Solicitar reserva <span>→</span>'}};
   async function searchMyReservations(){
     const box=$('#myReservationsResult'),siape=$('#reservationSearchSiape').value.trim();
+    if(!getDb())return box.innerHTML='<p class="error-text">A consulta será liberada após a configuração do banco do SIGLAB.</p>';
     if(siape.length<5)return box.innerHTML='<p class="error-text">Informe seu SIAPE.</p>';
     box.innerHTML='<p class="empty">Preparando acesso seguro…</p>';
     const {error}=await sb.rpc('request_reservation_access',{p_siape:siape});
@@ -320,6 +341,9 @@
 
   async function reservationActionFromLink(){
     const params=new URLSearchParams(location.search),confirmToken=params.get('confirm_reservation'),cancelToken=params.get('cancel_reservation'),manageToken=params.get('manage_reservations'),confirmCancelToken=params.get('confirm_cancel_request');
+    if(!getDb()&&(confirmToken||cancelToken||manageToken||confirmCancelToken)){
+      const box=$('#reservationConfirmation');box.hidden=false;box.innerHTML='<strong>Ambiente ainda não configurado</strong><p>Este link depende do banco exclusivo do SIGLAB.</p>';return;
+    }
     if(manageToken){togglePublicReservationForm(false);toggleMyReservationsForm(true);$('#reservationSearchSiape').closest('.protocol-search').hidden=true;$('#myReservationsResult').insertAdjacentHTML('beforebegin','<p class="secure-access-label">Acesso validado pelo e-mail institucional</p>');await loadSecureReservations(manageToken);return}
     if(confirmCancelToken){const box=$('#reservationConfirmation');box.hidden=false;box.innerHTML='<strong>Confirmando solicitação de cancelamento…</strong>';const {data,error}=await sb.rpc('confirm_reservation_cancellation_request',{p_token:confirmCancelToken});box.innerHTML=error?`<strong>Não foi possível confirmar</strong><p>${safe(error.message)}</p>`:`<strong>✓ Solicitação ${safe(data?.[0]?.protocol)} confirmada</strong><p>O pedido foi encaminhado para análise da equipe técnica. A reserva permanece na agenda até a decisão.</p>`;history.replaceState({},'',location.pathname);return}
     if(!confirmToken&&!cancelToken)return;const box=$('#reservationConfirmation');box.hidden=false;if(cancelToken){box.innerHTML='<strong>Cancelar esta solicitação de reserva?</strong><p>Se for uma reserva semanal, todas as ocorrências ainda não confirmadas da série serão canceladas.</p><button id="confirmEmailReservationCancellation" class="danger-button" type="button">Sim, cancelar solicitação</button>';$('#confirmEmailReservationCancellation').onclick=async event=>{const button=event.currentTarget;button.disabled=true;button.textContent='Cancelando…';const {data,error}=await sb.rpc('cancel_reservation_from_email',{p_token:cancelToken});if(error){box.innerHTML=`<strong>Não foi possível cancelar</strong><p>${safe(error.message)}</p>`;return}const count=Number(data?.[0]?.cancelled_count||0);box.innerHTML=`<strong>✓ Solicitação ${safe(data?.[0]?.protocol)} cancelada</strong><p>${count?`${count} ocorrência(s) foram canceladas e não serão encaminhadas para autorização.`:'Esta solicitação já estava cancelada.'}</p>`;history.replaceState({},'',location.pathname)};return}box.innerHTML='<strong>Confirmando sua reserva…</strong>';const {data,error}=await sb.rpc('confirm_reservation',{p_token:confirmToken});box.innerHTML=error?`<strong>Não foi possível confirmar</strong><p>${safe(error.message)}</p>`:`<strong>✓ Reserva ${safe(data?.[0]?.protocol)} confirmada</strong><p>A solicitação foi encaminhada para autorização da equipe.</p>`;history.replaceState({},'',location.pathname)
@@ -395,6 +419,7 @@
     }
   }
   async function refreshReservationNotice(){
+    if(!getDb()){if(reservationNotice)reservationNotice.hidden=true;return}
     const {data:sessionData}=await sb.auth.getSession();
     if(!sessionData?.session){if(reservationNotice)reservationNotice.hidden=true;return}
     const [{data:rows,error},{data:cancellations,error:cancelError}]=await Promise.all([
@@ -836,7 +861,7 @@
       console.error('Erro ao carregar reservas:',err);
       toast(err.message||'Erro ao carregar reservas.');
     }
-    if(!reservationChannel)reservationChannel=sb.channel('labinfo-reservations').on('postgres_changes',{event:'*',schema:'public',table:'reservations'},()=>scheduleReservationReload()).on('postgres_changes',{event:'*',schema:'public',table:'reservation_cancellation_requests'},()=>scheduleReservationReload()).subscribe();
+    if(getDb()&&!reservationChannel)reservationChannel=sb.channel('siglab-reservations').on('postgres_changes',{event:'*',schema:'public',table:'reservations'},()=>scheduleReservationReload()).on('postgres_changes',{event:'*',schema:'public',table:'reservation_cancellation_requests'},()=>scheduleReservationReload()).subscribe();
   }
   window.labinfoOpenReservations=openReservationsAdmin;
   window.labinfoLoadReservationAdmin=loadReservationAdmin;
@@ -865,11 +890,13 @@
   $('#reservationToday')?.addEventListener('click',()=>{weekStart=getMonday(new Date());refreshCalendarOnly()});
   $('#reviewReservationsButton')?.addEventListener('click',openReservationsAdmin);
 
-  sb.auth.onAuthStateChange(event=>{if(event==='SIGNED_IN')setTimeout(refreshReservationNotice,0);if(event==='SIGNED_OUT')if(reservationNotice)reservationNotice.hidden=true});
-  sb.channel('labinfo-reservation-review-notice').on('postgres_changes',{event:'*',schema:'public',table:'reservations'},refreshReservationNotice).subscribe();
-  window.addEventListener('focus',refreshReservationNotice);
-  setInterval(()=>{if(!document.hidden)refreshReservationNotice()},60000);
-  refreshReservationNotice();
+  if(getDb()){
+    sb.auth.onAuthStateChange(event=>{if(event==='SIGNED_IN')setTimeout(refreshReservationNotice,0);if(event==='SIGNED_OUT')if(reservationNotice)reservationNotice.hidden=true});
+    sb.channel('siglab-reservation-review-notice').on('postgres_changes',{event:'*',schema:'public',table:'reservations'},refreshReservationNotice).subscribe();
+    window.addEventListener('focus',refreshReservationNotice);
+    setInterval(()=>{if(!document.hidden)refreshReservationNotice()},60000);
+    refreshReservationNotice();
+  }
 
   function modal(id,open){$('#'+id).hidden=!open;document.body.classList.toggle('modal-open',open)}
   $('#newReservationButton')?.addEventListener('click',()=>modal('reservationModal',true));

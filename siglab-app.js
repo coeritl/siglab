@@ -1,0 +1,265 @@
+(() => {
+  const $ = selector => document.querySelector(selector);
+  const safe = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[char]);
+  const cfg = window.LABINFO_SUPABASE || window.SIGLAB_SUPABASE || {};
+  const siteBase = location.hostname.endsWith('.github.io') ? '/siglab' : '';
+  const sitePath = route => `${siteBase}/${route ? String(route).replace(/^\/+|\/+$/g, '') + '/' : ''}`;
+  let toastTimer = null;
+  let currentProfile = null;
+
+  window.toast = message => {
+    const element = $('#toast');
+    if (!element) return;
+    clearTimeout(toastTimer);
+    element.textContent = String(message || '');
+    element.classList.add('show');
+    toastTimer = setTimeout(() => element.classList.remove('show'), 5000);
+  };
+
+  const dbConfigured = Boolean(cfg.url && cfg.anonKey && window.supabase);
+  const sb = dbConfigured ? window.supabase.createClient(cfg.url, cfg.anonKey) : null;
+  window.siglabDb = sb;
+  window.labinfoDb = sb;
+
+  if (!dbConfigured) {
+    document.body.insertAdjacentHTML('afterbegin', '<div class="db-banner siglab-demo-banner"><strong>Ambiente de demonstração</strong><span>O banco exclusivo do SIGLAB ainda será configurado. A agenda abaixo contém apenas espaços ilustrativos.</span></div>');
+  }
+
+  function setPublicView(view, push = true) {
+    document.body.classList.remove('admin-route');
+    $('#homeView').hidden = view !== 'home';
+    $('#reservationsPublicView').hidden = view !== 'reservations';
+    $('#adminView').hidden = true;
+    $('#adminAccount').hidden = true;
+    $('.siglab-public-nav').hidden = false;
+    if (push) history.pushState({}, '', view === 'reservations' ? sitePath('reservas') : sitePath(''));
+    window.scrollTo(0, 0);
+  }
+
+  function openReservations() {
+    if (typeof window.labinfoShowPublic === 'function') window.labinfoShowPublic('reservations');
+    else setPublicView('reservations');
+  }
+
+  $('#headerScheduleButton').onclick = openReservations;
+  $('#homeAdminButton').onclick = () => requestAdmin();
+  $('#adminToggle').onclick = () => requestAdmin();
+  $('.siglab-brand').onclick = event => {
+    event.preventDefault();
+    if ($('#adminView').hidden) setPublicView('home');
+  };
+
+  const loginModal = $('#loginModal');
+  function openLogin() {
+    loginModal.hidden = false;
+    document.body.classList.add('modal-open');
+    setTimeout(() => $('#loginEmail').focus(), 40);
+  }
+  function closeLogin() {
+    loginModal.hidden = true;
+    document.body.classList.remove('modal-open');
+    $('#loginError').textContent = '';
+  }
+  $('#closeLogin').onclick = closeLogin;
+  loginModal.onclick = event => { if (event.target === loginModal) closeLogin(); };
+
+  async function getActiveProfile() {
+    if (!sb) return null;
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return null;
+    const { data: profile, error } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+    if (error || !profile?.active) {
+      await sb.auth.signOut();
+      return null;
+    }
+    return profile;
+  }
+
+  async function requestAdmin() {
+    if (!sb) return toast('A área interna será liberada após a configuração do banco exclusivo do SIGLAB.');
+    currentProfile = await getActiveProfile();
+    if (!currentProfile) return openLogin();
+    await enterAdmin();
+  }
+
+  $('#loginForm').onsubmit = async event => {
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    button.textContent = 'Entrando…';
+    $('#loginError').textContent = '';
+    try {
+      const { error } = await sb.auth.signInWithPassword({
+        email: $('#loginEmail').value.trim(),
+        password: $('#loginPassword').value
+      });
+      if (error) throw error;
+      currentProfile = await getActiveProfile();
+      if (!currentProfile) throw new Error('Usuário inativo ou sem perfil de acesso.');
+      closeLogin();
+      event.target.reset();
+      await enterAdmin();
+    } catch (error) {
+      $('#loginError').textContent = error.message === 'Invalid login credentials' ? 'E-mail ou senha inválidos.' : error.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Entrar';
+    }
+  };
+
+  async function enterAdmin() {
+    document.body.classList.add('admin-route');
+    $('#homeView').hidden = true;
+    $('#reservationsPublicView').hidden = true;
+    $('#adminView').hidden = false;
+    $('.siglab-public-nav').hidden = true;
+    $('#adminAccount').hidden = false;
+    $('#adminIdentity strong').textContent = currentProfile.full_name || currentProfile.email;
+    $('#adminIdentity small').textContent = currentProfile.role === 'supervisor' ? 'Supervisão' : 'Equipe SIGLAB';
+    history.pushState({}, '', sitePath('admin/reservas'));
+    await window.labinfoReservationsReady;
+    await window.labinfoOpenReservations?.();
+    window.scrollTo(0, 0);
+  }
+
+  $('#logoutButton').onclick = async () => {
+    if (sb) await sb.auth.signOut();
+    currentProfile = null;
+    setPublicView('home');
+    toast('Sessão encerrada.');
+  };
+
+  $('#adminMenuButton').onclick = () => {
+    const menu = $('#adminMenuDropdown');
+    menu.hidden = !menu.hidden;
+  };
+
+  function hideAdminSections() {
+    document.querySelectorAll('#adminView .admin-section').forEach(section => { section.hidden = true; });
+    $('#adminMenuDropdown').hidden = true;
+  }
+
+  async function showAdminSection(section) {
+    if (section === 'reservations') return window.labinfoOpenReservations?.();
+    hideAdminSections();
+    const target = section === 'labs' ? $('#labsSection') : $('#serversSection');
+    target.hidden = false;
+    $('#adminTitle').textContent = section === 'labs' ? 'Laboratórios e espaços' : 'Servidores cadastrados';
+    $('#adminSubtitle').textContent = section === 'labs'
+      ? 'Defina quais espaços podem aparecer publicamente para reserva.'
+      : 'Gerencie quem pode solicitar reservas no portal.';
+    if (section === 'labs') await renderLabs();
+    else await renderServers();
+  }
+
+  $('#adminMenuDropdown').addEventListener('click', event => {
+    const button = event.target.closest('[data-section]');
+    if (!button) return;
+    event.preventDefault();
+    showAdminSection(button.dataset.section);
+  });
+
+  async function renderLabs() {
+    const section = $('#labsSection');
+    section.innerHTML = '<div class="card siglab-loading">Carregando laboratórios…</div>';
+    const { data: labs, error } = await sb.from('labs').select('*').order('name');
+    if (error) return section.innerHTML = `<div class="card siglab-error">${safe(error.message)}</div>`;
+    section.innerHTML = `
+      <div class="siglab-registry-grid">
+        <form id="labRegistryForm" class="card siglab-registry-form">
+          <span class="eyebrow">NOVO ESPAÇO</span><h2>Cadastrar laboratório</h2>
+          <label>Nome<input name="name" maxlength="120" required></label>
+          <div class="field-row"><label>Código<input name="code" maxlength="30"></label><label>Localização<input name="location" maxlength="120"></label></div>
+          <div class="field-row"><label>Computadores<input name="computer_count" type="number" min="0" value="0"></label><label>Sistema operacional<input name="operating_system" maxlength="100"></label></div>
+          <label class="siglab-check"><input name="reservation_enabled" type="checkbox"><span>Exibir publicamente para reserva</span></label>
+          <button class="primary" type="submit">Salvar laboratório</button>
+        </form>
+        <section class="card siglab-registry-list"><header><div><span class="eyebrow">ESPAÇOS</span><h2>${labs.length} cadastro(s)</h2></div></header><div>${labs.map(lab => `
+          <article><div><strong>${safe(lab.name)}</strong><span>${safe(lab.location || 'Local não informado')} · ${Number(lab.computer_count || 0)} computador(es)</span></div><label class="siglab-inline-check"><input type="checkbox" data-lab-public="${lab.id}" ${lab.reservation_enabled ? 'checked' : ''}><span>Público</span></label><button class="${lab.active === false ? 'secondary' : 'danger-button'}" data-lab-active="${lab.id}" data-next="${lab.active === false}">${lab.active === false ? 'Reativar' : 'Desativar'}</button></article>
+        `).join('') || '<p class="empty">Nenhum laboratório cadastrado.</p>'}</div></section>
+      </div>`;
+
+    $('#labRegistryForm').onsubmit = async event => {
+      event.preventDefault();
+      const form = new FormData(event.target);
+      const payload = {
+        name: form.get('name').trim(), code: form.get('code').trim() || null,
+        location: form.get('location').trim() || null,
+        computer_count: Number(form.get('computer_count') || 0),
+        operating_system: form.get('operating_system').trim() || null,
+        reservation_enabled: form.has('reservation_enabled'), active: true
+      };
+      const { error: insertError } = await sb.from('labs').insert(payload);
+      if (insertError) return toast(insertError.message);
+      toast('Laboratório cadastrado.');
+      await renderLabs();
+    };
+    section.querySelectorAll('[data-lab-public]').forEach(control => control.onchange = async () => {
+      const { error: updateError } = await sb.from('labs').update({ reservation_enabled: control.checked }).eq('id', control.dataset.labPublic);
+      if (updateError) { control.checked = !control.checked; return toast(updateError.message); }
+      toast(control.checked ? 'Espaço publicado para reservas.' : 'Espaço retirado da seleção pública.');
+    });
+    section.querySelectorAll('[data-lab-active]').forEach(button => button.onclick = async () => {
+      const next = button.dataset.next === 'true';
+      const { error: updateError } = await sb.from('labs').update({ active: next, reservation_enabled: false }).eq('id', button.dataset.labActive);
+      if (updateError) return toast(updateError.message);
+      await renderLabs();
+    });
+  }
+
+  async function renderServers() {
+    const section = $('#serversSection');
+    section.innerHTML = '<div class="card siglab-loading">Carregando servidores…</div>';
+    const { data: servers, error } = await sb.from('servers').select('*').order('full_name');
+    if (error) return section.innerHTML = `<div class="card siglab-error">${safe(error.message)}</div>`;
+    section.innerHTML = `
+      <div class="siglab-registry-grid">
+        <form id="serverRegistryForm" class="card siglab-registry-form">
+          <span class="eyebrow">NOVO SERVIDOR</span><h2>Cadastrar ou reativar</h2>
+          <label>Nome completo<input name="full_name" maxlength="160" required></label>
+          <label>SIAPE<input name="siape" inputmode="numeric" maxlength="20" required></label>
+          <label>E-mail institucional<input name="email" type="email" maxlength="180" required></label>
+          <button class="primary" type="submit">Salvar servidor</button>
+        </form>
+        <section class="card siglab-registry-list"><header><div><span class="eyebrow">SERVIDORES</span><h2>${servers.length} cadastro(s)</h2></div></header><div>${servers.map(server => `
+          <article><div><strong>${safe(server.full_name)}</strong><span>SIAPE ${safe(server.siape)} · ${safe(server.email)}</span></div><button class="${server.active === false ? 'secondary' : 'danger-button'}" data-server-active="${server.id}" data-next="${server.active === false}">${server.active === false ? 'Reativar' : 'Desativar'}</button></article>
+        `).join('') || '<p class="empty">Nenhum servidor cadastrado.</p>'}</div></section>
+      </div>`;
+
+    $('#serverRegistryForm').onsubmit = async event => {
+      event.preventDefault();
+      const form = new FormData(event.target);
+      const siape = form.get('siape').trim();
+      const email = form.get('email').trim().toLowerCase();
+      if (!email.endsWith('@ifms.edu.br')) return toast('Use um e-mail institucional @ifms.edu.br.');
+      const { data: existing, error: lookupError } = await sb.from('servers').select('id').or(`siape.eq.${siape},email.eq.${email}`).limit(1).maybeSingle();
+      if (lookupError) return toast(lookupError.message);
+      const payload = { siape, email, full_name: form.get('full_name').trim(), active: true };
+      const result = existing
+        ? await sb.from('servers').update(payload).eq('id', existing.id)
+        : await sb.from('servers').insert(payload);
+      if (result.error) return toast(result.error.message);
+      toast(existing ? 'Servidor reativado e atualizado.' : 'Servidor cadastrado.');
+      await renderServers();
+    };
+    section.querySelectorAll('[data-server-active]').forEach(button => button.onclick = async () => {
+      const { error: updateError } = await sb.from('servers').update({ active: button.dataset.next === 'true' }).eq('id', button.dataset.serverActive);
+      if (updateError) return toast(updateError.message);
+      await renderServers();
+    });
+  }
+
+  window.addEventListener('popstate', () => {
+    if (location.pathname.includes('/admin')) requestAdmin();
+    else if (location.pathname.includes('/reservas')) openReservations();
+    else setPublicView('home', false);
+  });
+
+  const params = new URLSearchParams(location.search);
+  const route = params.get('route') || location.pathname.slice(siteBase.length).replace(/^\/+|\/+$/g, '');
+  const reservationLink = ['confirm_reservation', 'cancel_reservation', 'manage_reservations', 'confirm_cancel_request'].some(key => params.has(key));
+  if (route.startsWith('admin')) setTimeout(requestAdmin, 0);
+  else if (route === 'reservas' || reservationLink) setTimeout(openReservations, 0);
+})();
