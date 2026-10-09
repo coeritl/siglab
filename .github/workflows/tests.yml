@@ -1,0 +1,21 @@
+name: Testes
+
+# Achado P2 3.4 da auditoria de 26/08/2026: suíte básica de testes
+# automatizados. Roda em cada push e pull request para pegar cedo uma
+# regressão nos helpers de escape (XSS) ou nas permissões/policies das
+# migrations do Supabase (ver tests/ e tests/README.md).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm test
