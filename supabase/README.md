@@ -6,11 +6,14 @@ pública, o banco, o Apps Script ou o cliente OAuth do LabInfo em produção.
 ## Banco
 
 1. Crie um projeto Supabase exclusivo.
-2. No SQL Editor, execute `schema.sql`.
-3. Execute todos os arquivos de `migrations/` na ordem do nome. A migration
-   `20261026_siglab_multisector_google_reservations.sql` instala setores,
-   permissões por laboratório, autenticação Google e reservas diretas.
-4. Preencha `supabase-config.js` somente com a URL e a chave pública do novo
+2. Para uma instalação nova, execute uma única vez
+   `bootstrap.generated.sql` no SQL Editor. Ele consolida `schema.sql` e todas
+   as migrações na ordem correta.
+3. Para regenerar o arquivo após novas migrações, execute
+   `node scripts/build-supabase-bootstrap.mjs`.
+4. A migração `20261026_siglab_multisector_google_reservations.sql` instala
+   setores, permissões por laboratório, autenticação Google e reservas diretas.
+5. Preencha `supabase-config.js` somente com a URL e a chave pública do novo
    projeto.
 
 ## Google Workspace
