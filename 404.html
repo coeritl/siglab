@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>LabInfo TL</title>
+    <title>SIGLAB</title>
     <script>
       (function() {
-        var base = location.hostname.endsWith('.github.io') ? '/labinfo' : '';
+        var base = location.hostname.endsWith('.github.io') ? '/siglab' : '';
         var path = location.pathname.slice(base.length).replace(/^\/+|\/+$/g, '');
         var search = location.search ? '&' + location.search.slice(1) : '';
         var target = base + '/' + (path ? '?route=' + encodeURIComponent(path) + search : (location.search || ''));
@@ -15,6 +15,6 @@
     </script>
   </head>
   <body>
-    <p>Redirecionando para o LabInfo…</p>
+    <p>Redirecionando para o SIGLAB…</p>
   </body>
 </html>

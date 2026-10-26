@@ -1,18 +1,65 @@
-# Configuração do Supabase
+# Configuração do Supabase do SIGLAB
 
-1. Crie um projeto gratuito no Supabase.
-2. Abra **SQL Editor**, cole todo o conteúdo de `schema.sql` e execute.
-3. Execute, em ordem cronológica pelo nome do arquivo, todos os scripts da pasta `migrations/`. Em uma instalação já existente, execute somente os que ainda não foram aplicados. A migração `20260817_completion_confirmation_email.sql` é necessária para incluir a solução e o link de confirmação no e-mail de conclusão.
-4. Em **Authentication → Users**, crie os usuários dos técnicos e supervisores com e-mail e senha.
-5. No SQL Editor, execute o `insert into public.profiles...` indicado no fim do arquivo para cada usuário.
-6. Copie `config.example.js` para `supabase-config.js` na raiz do site e preencha a URL e a chave pública do projeto.
-7. Para permitir que um técnico crie novos logins pelo painel, instale o Supabase CLI e execute:
+O SIGLAB deve usar um projeto Supabase próprio. Não reutilize a URL, a chave
+pública, o banco, o Apps Script ou o cliente OAuth do LabInfo em produção.
+
+## Banco
+
+1. Crie um projeto Supabase exclusivo.
+2. No SQL Editor, execute `schema.sql`.
+3. Execute todos os arquivos de `migrations/` na ordem do nome. A migration
+   `20261026_siglab_multisector_google_reservations.sql` instala setores,
+   permissões por laboratório, autenticação Google e reservas diretas.
+4. Preencha `supabase-config.js` somente com a URL e a chave pública do novo
+   projeto.
+
+## Google Workspace
+
+No Google Auth Platform, crie um cliente Web exclusivo do SIGLAB:
+
+- origem JavaScript: `https://laboratorios.tl.ifms.edu.br`;
+- URI de redirecionamento: a URL `...supabase.co/auth/v1/callback` exibida pelo
+  provedor Google no Supabase.
+
+No Supabase, ative **Authentication → Providers → Google** com esse Client ID
+e Client Secret. Em **URL Configuration**, use:
+
+- Site URL: `https://laboratorios.tl.ifms.edu.br`;
+- Redirect URL: `https://laboratorios.tl.ifms.edu.br/**`.
+
+O domínio informado na interface não é a barreira de segurança. As funções do
+banco também conferem o provedor Google, o domínio `@ifms.edu.br` e o cadastro
+ativo em `servers` ou `profiles`.
+
+## Primeiro administrador
+
+Cadastre o servidor em `servers`, faça uma primeira entrada pelo Google e,
+depois, vincule o usuário criado pelo Supabase:
+
+```sql
+insert into public.servers(siape,full_name,email,active)
+values('SEU_SIAPE','Nome completo','nome@ifms.edu.br',true)
+on conflict(siape) do update set
+  full_name=excluded.full_name,email=excluded.email,active=true;
+
+insert into public.profiles(id,siape,full_name,email,role,active)
+select id,'SEU_SIAPE','Nome completo',lower(email),'admin',true
+from auth.users where lower(email)='nome@ifms.edu.br'
+on conflict(id) do update set role='admin',active=true;
+```
+
+Depois disso, o administrador pode criar setores, cadastrar a equipe e atribuir
+um ou mais setores a cada técnico pela própria área interna.
+
+## Edge Function
+
+Implante a função que prepara os perfis internos. Ela gera uma credencial
+aleatória não divulgada; o usuário sempre entra pelo Google:
 
 ```bash
 supabase link --project-ref SEU_PROJECT_REF
 supabase functions deploy create-staff --no-verify-jwt
 ```
 
-O próprio código da função valida o JWT e confirma que o solicitante possui perfil `tecnico` ativo. Técnicos e supervisores entram com e-mail e senha; apenas técnicos veem operações de alteração.
-
-Nunca coloque a chave `service_role` no GitHub Pages. A chave pública/publishable é a única apropriada para o navegador; a segurança é aplicada pelas políticas RLS.
+A função aceita chamadas somente de um perfil `admin` ativo autenticado pelo
+Google IFMS. Nunca exponha a chave `service_role` no site.

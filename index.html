@@ -4,27 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#11733c" />
-    <meta name="description" content="Sistema de chamados dos Laboratórios de Informática do IFMS Campus Três Lagoas" />
-    <title>LabInfo | Suporte IFMS</title>
-    <link rel="stylesheet" href="styles.css?v=b39c190e51" />
+    <meta name="description" content="Sistema Integrado de Gestão e Reserva dos Laboratórios do IFMS Campus Três Lagoas" />
+    <title>SIGLAB | Laboratórios IFMS</title>
+    <link rel="stylesheet" href="styles.css?v=8550cf74e6" />
   </head>
   <body>
     <header class="topbar">
-      <a class="brand brand-new" href="#" aria-label="LabInfo TL - Suporte, início">
-        <img class="brand-logo" src="assets/labinfo-logo.png" width="168" height="33" style="display:block;width:168px;height:33px;object-fit:contain" alt="LabInfo TL" />
-        <span class="brand-system-name">Suporte</span>
+      <a class="brand brand-new siglab-brand" href="#" aria-label="SIGLAB, início">
+        <strong>SIGLAB</strong>
+        <span class="brand-system-name">Laboratórios IFMS</span>
       </a>
+      <div class="public-auth-header"><button class="google-auth-button compact" id="publicAuthButton" type="button"><span aria-hidden="true">G</span> Entrar com @ifms.edu.br</button><div id="publicSessionStatus" class="public-session-status" hidden></div></div>
       <button class="admin-link" id="adminToggle" type="button">Área técnica</button>
     </header>
 
     <main>
       <section id="homeView" class="home-view">
         <div class="home-hero">
-          <img class="home-brand-logo" src="assets/labinfo-logo.png" width="260" height="51" alt="LabInfo TL | Suporte" />
-          <h1>O que você precisa?</h1>
+          <div class="home-siglab-mark">SIGLAB</div>
+          <h1>Reserve os laboratórios do campus</h1>
+          <p>Consulte as agendas por setor e escolha um horário disponível para suas atividades.</p>
         </div>
         <div class="service-choice-grid">
-          <button id="openSupport" class="service-choice card" type="button">
+          <button id="openSupport" class="service-choice card" type="button" hidden>
             <span class="service-choice-icon" aria-hidden="true">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
             </span>
@@ -33,7 +35,7 @@
             <p>Solicite atendimento para computadores, rede, projetores e periféricos.</p>
             <b>Abrir chamado ›</b>
           </button>
-          <button id="openLiveChat" class="service-choice card live-chat-choice" type="button">
+          <button id="openLiveChat" class="service-choice card live-chat-choice" type="button" hidden>
             <span class="service-choice-icon" aria-hidden="true">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/></svg>
             </span>
@@ -50,9 +52,9 @@
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><circle cx="8" cy="14" r="1"/><circle cx="12" cy="14" r="1"/><circle cx="16" cy="14" r="1"/><circle cx="8" cy="18" r="1"/><circle cx="12" cy="18" r="1"/></svg>
             </span>
             <small>LABORATÓRIOS</small>
-            <strong>Ver ou solicitar uma reserva</strong>
-            <p>Consulte a agenda dos laboratórios e solicite horários para suas aulas.</p>
-            <b>Ver agenda ›</b>
+            <strong>Reservar um laboratório</strong>
+            <p>Escolha o setor, consulte a agenda e reserve diretamente um horário livre.</p>
+            <b>Acessar agendas ›</b>
           </button>
         </div>
       </section>
@@ -150,7 +152,7 @@
       </section>
 
       <section id="reservationsPublicView" class="reservations-public-view" hidden>
-        <div class="reservation-public-head"><button id="backHome" class="secondary" type="button">← Início</button><div><span class="eyebrow">RESERVAS DE LABORATÓRIO</span><h1>Agenda dos laboratórios</h1><p>Consulte a disponibilidade e, quando precisar, abra uma solicitação de reserva.</p></div></div>
+        <div class="reservation-public-head"><button id="backHome" class="secondary" type="button">← Início</button><div><span class="eyebrow">RESERVAS DE LABORATÓRIO</span><h1>Agenda dos laboratórios</h1><p>Servidores autenticados podem reservar diretamente qualquer horário livre.</p></div></div>
         <div id="reservationConfirmation" class="reservation-confirmation card" hidden></div>
         <div id="publicReservationNotice" class="modal-backdrop public-reservation-notice-backdrop" hidden>
           <section class="card public-reservation-notice" role="dialog" aria-modal="true" aria-labelledby="publicReservationNoticeTitle" aria-describedby="publicReservationNoticeMessage">
@@ -164,12 +166,12 @@
           </section>
         </div>
         <button id="togglePublicReservationForm" class="card reservation-form-toggle" type="button" aria-expanded="false"><span><i>+</i><span><strong>Fazer uma reserva</strong><small>Informe o laboratório, a data e o horário desejados</small></span></span><b>Expandir ↓</b></button>
-        <section class="card public-lab-picker"><div class="public-lab-picker-head"><div><span class="eyebrow">ESCOLHA O ESPAÇO</span><h2>Laboratórios disponíveis</h2><p>Selecione um laboratório para consultar sua agenda e utilizá-lo na solicitação.</p></div></div><div id="publicLabCards" class="public-lab-cards"></div></section>
+        <section class="card public-lab-picker"><div class="public-lab-picker-head"><div><span class="eyebrow">ESCOLHA O SETOR E O ESPAÇO</span><h2>Laboratórios disponíveis</h2><p>Informática continua no LabInfo; os demais setores são reservados diretamente pelo SIGLAB.</p></div></div><div id="publicSectorCards" class="public-sector-cards"></div><div id="publicLabCards" class="public-lab-cards"></div></section>
         <div class="reservation-public-grid">
           <form id="publicReservationForm" class="card reservation-form" hidden>
             <div class="section-title"><span>1</span><div><h2>Identificação</h2><p>Somente servidores cadastrados podem solicitar</p></div></div>
-            <label>SIAPE<input id="reservationSiape" inputmode="numeric" autocomplete="off" placeholder="0000000" required></label>
-            <p id="reservationIdentity" class="field-hint">Digite seu SIAPE para validação.</p>
+            <input id="reservationSiape" type="hidden">
+            <div id="reservationIdentity" class="institutional-reservation-identity">Entre com sua conta @ifms.edu.br para confirmar sua identidade.</div>
             <div class="section-title"><span>2</span><div><h2>Data e laboratório</h2><p>Blocos de aula com 45 minutos</p></div></div>
             <div id="reservationSelectedLab" class="reservation-selected-lab"><strong>Laboratório</strong><span>Selecione um dos espaços nos cards acima.</span></div><select id="reservationLab" hidden><option value="">Selecione o laboratório</option></select>
             <div class="field-row reservation-time-row"><label>Data<input id="reservationDate" type="date" required></label><label>Início<input id="reservationTime" type="time" step="300" required></label><label>Fim<input id="reservationEndTime" type="time" step="300" required></label></div>
@@ -177,11 +179,11 @@
             <div class="section-title"><span>3</span><div><h2>Informações da aula</h2></div></div>
             <label>Disciplina ou atividade<input id="reservationSubject" maxlength="160" placeholder="Ex.: Programação Web" required></label>
             <label>Observações <small>(opcional)</small><textarea id="reservationNotes" rows="3" maxlength="500" placeholder="Turma, software necessário ou outra informação relevante"></textarea></label>
-            <button class="primary" type="submit">Solicitar reserva <span>→</span></button>
+            <button class="primary" type="submit">Confirmar reserva <span>→</span></button>
           </form>
-          <aside class="reservation-side"><section class="card reservation-rules"><h2>Horários dos laboratórios</h2><div><strong>Matutino</strong><span>7h às 12h35</span></div><div><strong>Vespertino</strong><span>13h às 18h35</span></div><div><strong>Noturno</strong><span>18h45 às 22h50</span></div><small>Segunda a sábado • blocos de 45 minutos</small></section><section class="card my-reservations"><h2>Minhas reservas</h2><p>Receba no e-mail institucional um link seguro para consultar reservas futuras e solicitar cancelamentos.</p><div class="protocol-search"><input id="reservationSearchSiape" inputmode="numeric" autocomplete="off" placeholder="Digite seu SIAPE"><button id="searchReservations" type="button">Enviar link</button></div><div id="myReservationsResult"></div></section></aside>
+          <aside class="reservation-side"><section class="card reservation-rules"><h2>Horários dos laboratórios</h2><div><strong>Matutino</strong><span>7h às 12h35</span></div><div><strong>Vespertino</strong><span>13h às 18h35</span></div><div><strong>Noturno</strong><span>18h45 às 22h50</span></div><small>Segunda a sábado • conforme a disponibilidade de cada setor</small></section><section class="card my-reservations"><h2>Minhas reservas</h2><p>A sessão institucional identifica automaticamente todas as suas reservas futuras.</p><div class="protocol-search"><input id="reservationSearchSiape" type="hidden"><button id="searchReservations" type="button">Carregar minhas reservas</button></div><div id="myReservationsResult"></div></section></aside>
         </div>
-        <section id="publicScheduleCard" class="card public-schedule-card" hidden><div class="public-schedule-head"><div><span class="eyebrow">AGENDA DO LABORATÓRIO</span><h2 id="publicScheduleTitle">Grade de reservas</h2><p id="publicScheduleDescription">Consulte os horários ocupados antes de fazer sua solicitação.</p></div><select id="publicScheduleLab" hidden></select></div><div class="public-week-navigation"><button id="publicSchedulePrev" class="secondary" type="button">← Semana anterior</button><strong id="publicScheduleWeek"></strong><button id="publicScheduleNext" class="secondary" type="button">Próxima semana →</button></div><div class="public-schedule-scroll"><div id="publicReservationSchedule" class="reservation-calendar public-reservation-calendar"></div></div><div class="schedule-legend"><span><i class="available"></i>Disponível</span><span><i class="occupied"></i>Reservado</span><span><i class="pending"></i>Em análise</span></div></section>
+        <section id="publicScheduleCard" class="card public-schedule-card" hidden><div class="public-schedule-head"><div><span class="eyebrow">AGENDA DO LABORATÓRIO</span><h2 id="publicScheduleTitle">Grade de reservas</h2><p id="publicScheduleDescription">Consulte os horários ocupados antes de fazer sua reserva.</p></div><select id="publicScheduleLab" hidden></select></div><div class="public-week-navigation"><button id="publicSchedulePrev" class="secondary" type="button">← Semana anterior</button><strong id="publicScheduleWeek"></strong><button id="publicScheduleNext" class="secondary" type="button">Próxima semana →</button></div><div class="public-schedule-scroll"><div id="publicReservationSchedule" class="reservation-calendar public-reservation-calendar"></div></div><div class="schedule-legend"><span><i class="available"></i>Disponível</span><span><i class="occupied"></i>Reservado</span></div></section>
       </section>
 
       <section id="teacherView" class="teacher-view" hidden>
@@ -423,11 +425,13 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <footer><span>SISLAB - Sistema Integrado de Gestão dos Laboratórios de Informática - TL</span></footer>
+    <footer><span>SIGLAB - Sistema Integrado de Gestão de Laboratórios - IFMS Campus Três Lagoas</span></footer>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-config.js?v=862fe46568"></script>
+    <script src="supabase-config.js?v=8bb6d91ad3"></script>
+    <script src="siglab-auth.js?v=71b3135a03"></script>
     <script src="app.js?v=ebc256d149"></script>
-    <script src="supabase-integration.js?v=83c618ebea"></script>
-<script src="reservations.js?v=1152a82216"></script>
+    <script src="supabase-integration.js?v=2defc7fcbc"></script>
+<script src="reservations.js?v=225264bcea"></script>
+    <script src="siglab-sectors.js?v=e79ad50dfa"></script>
   </body>
 </html>

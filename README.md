@@ -13,6 +13,22 @@ Três Lagoas, destinado ao domínio `laboratorios.tl.ifms.edu.br`.
 - referências a chamados, chat e à identidade LabInfo ainda são legado da
   base original e serão removidas na etapa de extração.
 
+## Arquitetura de reservas em implementação
+
+- cada laboratório pertence a um setor responsável;
+- técnicos recebem acesso somente aos setores atribuídos;
+- administradores cadastram setores, laboratórios e responsáveis;
+- servidores ativos entram pelo Google Workspace `@ifms.edu.br` e reservam
+  diretamente horários livres, sem aprovação técnica;
+- séries recorrentes são validadas integralmente antes de qualquer gravação;
+- os laboratórios de Informática são exibidos como acesso externo ao módulo de
+  reservas do LabInfo;
+- o técnico do setor pode cadastrar reservas e importar grades por CSV apenas
+  nos laboratórios sob sua responsabilidade.
+
+As regras acima são aplicadas por RLS e funções `security definer` no Supabase,
+e não apenas por filtros visuais no navegador.
+
 > Segurança: nunca inserir neste projeto chaves, segredos ou URLs privadas do
 > Supabase e do Apps Script usados pelo LabInfo em produção.
 

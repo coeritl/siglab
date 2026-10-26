@@ -12,8 +12,13 @@ Deno.serve(async (req) => {
     const {data:{user}} = await caller.auth.getUser();
     if (!user) throw new Error("Não autenticado");
     const admin = createClient(url, service);
-    const {data:profile} = await admin.from("profiles").select("role,active").eq("id",user.id).single();
-    if (!profile?.active || profile.role !== "tecnico") throw new Error("Sem permissão");
+    const callerEmail = String(user.email || "").trim().toLowerCase();
+    const providers = Array.isArray(user.app_metadata?.providers) ? user.app_metadata.providers : [];
+    if (!callerEmail.endsWith("@ifms.edu.br") || (user.app_metadata?.provider !== "google" && !providers.includes("google"))) {
+      throw new Error("Use sua conta Google institucional @ifms.edu.br.");
+    }
+    const {data:profile} = await admin.from("profiles").select("id,role,active").eq("email",callerEmail).single();
+    if (!profile?.active || profile.role !== "admin") throw new Error("Somente administradores do SIGLAB podem cadastrar usuários internos.");
     const body = await req.json();
     if (body.action === "update-email") {
       const targetId = String(body.user_id || "");
@@ -28,12 +33,18 @@ Deno.serve(async (req) => {
       if (profileEmailError) throw profileEmailError;
       return new Response(JSON.stringify({ok:true,email:newEmail}),{headers:{...cors,"Content-Type":"application/json"}});
     }
-    const {email,password,siape,full_name,role} = body;
-    if (!email || !password || !siape || !full_name || !["tecnico","supervisor"].includes(role)) throw new Error("Dados inválidos");
-    const {data:created,error} = await admin.auth.admin.createUser({email,password,email_confirm:true,user_metadata:{full_name,siape,role}});
+    const {email,siape,full_name,role} = body;
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@ifms\.edu\.br$/i.test(normalizedEmail) || !siape || !full_name || !["tecnico","supervisor","admin"].includes(role)) throw new Error("Dados inválidos");
+    // A senha aleatoria nunca e entregue ao usuario. O acesso ocorre somente
+    // pelo provedor Google, que vincula a identidade pelo e-mail institucional.
+    const temporaryPassword = `${crypto.randomUUID()}Aa1!`;
+    const {data:created,error} = await admin.auth.admin.createUser({email:normalizedEmail,password:temporaryPassword,email_confirm:true,user_metadata:{full_name,siape,role}});
     if (error) throw error;
-    const {error:profileError} = await admin.from("profiles").insert({id:created.user.id,email,siape,full_name,role});
+    const {error:profileError} = await admin.from("profiles").insert({id:created.user.id,email:normalizedEmail,siape,full_name,role});
     if (profileError) { await admin.auth.admin.deleteUser(created.user.id); throw profileError; }
+    const {error:serverError} = await admin.from("servers").upsert({email:normalizedEmail,siape,full_name,active:true},{onConflict:"siape"});
+    if (serverError) { await admin.from("profiles").delete().eq("id",created.user.id); await admin.auth.admin.deleteUser(created.user.id); throw serverError; }
     return new Response(JSON.stringify({ok:true,id:created.user.id}),{headers:{...cors,"Content-Type":"application/json"}});
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

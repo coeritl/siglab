@@ -31,6 +31,8 @@ on:
       - 'app.js'
       - 'supabase-integration.js'
       - 'reservations.js'
+      - 'siglab-auth.js'
+      - 'siglab-sectors.js'
       - 'supabase-config.js'
       - 'scripts/bump-cache-version.mjs'
       - 'scripts/minify.mjs'

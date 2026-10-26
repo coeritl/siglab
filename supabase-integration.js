@@ -1,23 +1,23 @@
 (function(){
-  const cfg=window.LABINFO_SUPABASE||{};
+  const cfg=window.SIGLAB_SUPABASE||window.LABINFO_SUPABASE||{};
   if(!cfg.url||!cfg.anonKey||!window.supabase){
     document.body.insertAdjacentHTML('afterbegin','<div class="db-banner">Modo demonstração — preencha <code>supabase-config.js</code> para ativar o banco.</div>');
     return;
   }
-  const sb=window.supabase.createClient(cfg.url,cfg.anonKey), state={profile:null,session:null};tickets.splice(0,tickets.length);selected=null;
-  const siteBase=location.hostname.endsWith('.github.io')?'/labinfo':'';
+  const sb=window.siglabDb||window.supabase.createClient(cfg.url,cfg.anonKey), state={profile:null,session:null};tickets.splice(0,tickets.length);selected=null;
+  const siteBase=location.hostname.endsWith('.github.io')?'/siglab':'';
   const sitePath=route=>`${siteBase}/${route?String(route).replace(/^\/+|\/+$/g,'')+'/':''}`;
   const routeParam=new URLSearchParams(location.search).get('route'),
         feedbackParam=new URLSearchParams(location.search).get('feedback'),
         requestedRoute=routeParam||location.pathname.slice(siteBase.length).replace(/^\/+|\/+$/g,'');
-  const adminRouteSlug=requestedRoute==='admin'?'chamados':requestedRoute.startsWith('admin/')?requestedRoute.slice(6):'';
+  const adminRouteSlug=requestedRoute==='admin'?'reservas':requestedRoute.startsWith('admin/')?requestedRoute.slice(6):'';
   const validAdminRouteSlugs=new Set(['chamados','relatorios','reservas','chat','cadastros','supervisor','horarios','manutencao']);
   const isAdminRoute=validAdminRouteSlugs.has(adminRouteSlug);
   const isSupportRoute=requestedRoute==='suporte'||Boolean(feedbackParam);
   if(routeParam&&!feedbackParam)window.addEventListener('load',()=>history.replaceState({},'',sitePath(requestedRoute)),{once:true});
   if(isAdminRoute){document.body.classList.add('admin-route');$('#homeView').hidden=true;$('#teacherView').hidden=true;$('#reservationsPublicView').hidden=true;const cp=$('#chatPublicView');if(cp)cp.hidden=true}
   if(isSupportRoute){$('#homeView').hidden=true;$('#teacherView').hidden=false;$('#reservationsPublicView').hidden=true;const cp=$('#chatPublicView');if(cp)cp.hidden=true}
-  window.labinfoDb=sb;
+  window.siglabDb=sb;window.labinfoDb=sb;
   const replace=(target,rows)=>{target.splice(0,target.length,...rows)};
   const fmt=d=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(d));
   const safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -66,7 +66,7 @@
     }
   }
 
-  document.body.insertAdjacentHTML('beforeend',`<div id="loginModal" class="modal-backdrop" hidden><div class="card login-card"><div class="modal-heading"><div><span class="eyebrow">ACESSO RESTRITO</span><h2>Entrar no painel</h2><p>Use as credenciais cadastradas no Supabase.</p></div><button id="closeLogin" class="modal-close">×</button></div><form id="loginForm"><label>E-mail do usuário<input id="loginEmail" type="email" autocomplete="username" required></label><label>Senha<input id="loginPassword" type="password" autocomplete="current-password" required></label><p id="loginError" class="login-error"></p><button class="primary" type="submit">Entrar</button></form></div></div>`);
+  document.body.insertAdjacentHTML('beforeend',`<div id="loginModal" class="modal-backdrop" hidden><div class="card login-card"><div class="modal-heading"><div><span class="eyebrow">ÁREA INTERNA DO SIGLAB</span><h2>Entrar com a conta IFMS</h2><p>O acesso é liberado somente para técnicos ativos e vinculados a um setor.</p></div><button id="closeLogin" class="modal-close">×</button></div><form id="loginForm"><p id="loginError" class="login-error"></p><button class="google-auth-button" type="submit"><span aria-hidden="true">G</span> Entrar com @ifms.edu.br</button></form></div></div>`);
   const loginModal=$('#loginModal');
   const loginIsRequired=()=>location.pathname.includes('/admin')||new URLSearchParams(location.search).get('route')==='admin';
   const openLogin=()=>{loginModal.hidden=false;document.body.classList.add('modal-open')};
@@ -84,7 +84,7 @@
     }
   };
   $('#closeLogin').onclick=()=>closeLogin();
-  $('#loginForm').onsubmit=async e=>{e.preventDefault();$('#loginError').textContent='';const button=e.submitter||e.target.querySelector('[type="submit"]');button.disabled=true;button.textContent='Entrando…';const {data:auth,error}=await sb.auth.signInWithPassword({email:$('#loginEmail').value.trim(),password:$('#loginPassword').value});if(error){button.disabled=false;button.textContent='Entrar';$('#loginError').textContent='Usuário ou senha inválidos.';return}state.session=auth.session;closeLogin(true);await enterAdmin();button.disabled=false;button.textContent='Entrar'};
+  $('#loginForm').onsubmit=async e=>{e.preventDefault();$('#loginError').textContent='';const button=e.submitter||e.target.querySelector('[type="submit"]');button.disabled=true;try{await window.siglabInstitutionalAuth.signIn(sitePath('admin/reservas'))}catch(error){button.disabled=false;button.innerHTML='<span aria-hidden="true">G</span> Entrar com @ifms.edu.br';$('#loginError').textContent=error?.message||'Não foi possível iniciar o login institucional.'}};
 
   async function performLogout(){
     try {
@@ -369,14 +369,15 @@
   };
   $('#protocolButton').onclick=async()=>{const siape=$('#protocolInput').value.trim(),result=$('#protocolResult');result.innerHTML='<p class="my-tickets-empty">Buscando chamados…</p>';const [{data:who},{data:rows,error}]=await Promise.all([sb.rpc('identify_server',{p_siape:siape}),sb.rpc('my_tickets',{p_siape:siape})]);if(error||(!who?.length&&!rows?.length)){result.innerHTML='<p class="my-tickets-empty error-text">Nenhum chamado encontrado para este SIAPE.</p>';return}const owner=who?.[0]?.full_name||`SIAPE ${safe(siape)} — cadastro pendente`;result.innerHTML=`<div class="my-tickets-owner"><div class="owner-avatar">${safe(owner.charAt(0))}</div><div><span>CHAMADOS DE</span><strong>${safe(owner)}</strong></div><em>${rows.length} chamado(s)</em></div>`+(rows.length?`<div class="my-tickets-list">${rows.map(t=>{const events=t.timeline||[],last=events[events.length-1];return `<article class="my-ticket-card"><header><strong>${safe(t.protocol)}</strong>${badge(t.status)}</header><h3>${safe(t.title)}</h3><div class="my-ticket-meta"><span><i>Local</i>${safe(t.lab||'Não informado')}</span><span><i>Categoria</i>${safe(t.category||'Sem categoria')}</span><span><i>Abertura</i>${fmt(t.created_at)}</span></div><div class="ticket-latest-event"><span>Último andamento</span><strong>${last?.label||'Chamado aberto'}</strong><time>${fmt(last?.at||t.updated_at)}</time></div><button class="ticket-details-toggle" type="button" aria-expanded="false">Ver detalhes</button><div class="public-ticket-timeline" hidden>${events.map(e=>`<div><i></i><span><strong>${safe(e.label)}</strong><time>${fmt(e.at)}</time></span></div>`).join('')}</div></article>`}).join('')}</div>`:'<div class="my-tickets-empty"><strong>Nenhum chamado encontrado</strong></div>');result.querySelectorAll('.ticket-details-toggle').forEach(button=>button.onclick=()=>{const timeline=button.nextElementSibling,open=timeline.hidden;timeline.hidden=!open;button.textContent=open?'Ocultar detalhes':'Ver detalhes';button.setAttribute('aria-expanded',open)})};
 
-  async function getProfile(){const {data:{session}}=await sb.auth.getSession();if(!session)return null;state.session=session;const {data:p,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();if(error||!p?.active)return null;state.profile=p;return p}
+  async function getProfile(){const {data:{session}}=await sb.auth.getSession();if(!session)return null;state.session=session;const {data,error}=await sb.rpc('get_my_staff_profile');const p=data?.[0]||null;if(error||!p)return null;state.profile={...p,active:true};return state.profile}
   async function loadAdmin(){
     const [sv,pr,ca,la,ti,at,ta,up]=await Promise.all([sb.from('servers').select('*').order('full_name'),sb.from('profiles').select('*').eq('active',true).order('full_name'),sb.from('categories').select('*').order('name'),sb.from('labs').select('*').order('name'),sb.from('tickets').select('*,servers(*),categories(*),labs(*),primary_assignee:profiles!tickets_assigned_to_fkey(*)').order('created_at',{ascending:false}),sb.from('attachments').select('*'),sb.from('ticket_assignees').select('ticket_id,profile_id,assignee_profile:profiles!ticket_assignees_profile_id_fkey(full_name)'),sb.from('ticket_updates').select('*,profiles(full_name)').order('created_at')]);
     const err=[sv,pr,ca,la,ti,at,ta,up].find(x=>x.error)?.error;if(err)return fail(err);
     replace(data.teachers,sv.data.map(x=>({id:x.id,siape:x.siape,name:x.full_name,email:x.email,active:x.active})));
     replace(data.technicians,pr.data.map(x=>({id:x.id,siape:x.siape,name:x.full_name,email:x.email,role:x.role,active:x.active})));
     replace(data.categories,ca.data.map(x=>({id:x.id,name:x.name,active:x.active})));sortCategories();
-    replace(data.labs,la.data.map(x=>({id:x.id,name:x.name,location:x.location,code:x.code,computerCount:x.computer_count||0,operatingSystem:x.operating_system||'',reservationEnabled:x.reservation_enabled===true,active:x.active})));
+    const managedSectorIds=new Set((state.profile?.sectors||[]).map(item=>item.id));
+    replace(data.labs,la.data.filter(x=>state.profile?.is_admin||managedSectorIds.has(x.sector_id)).map(x=>({id:x.id,name:x.name,location:x.location,code:x.code,sectorId:x.sector_id||null,computerCount:x.computer_count||0,operatingSystem:x.operating_system||'',reservationEnabled:x.reservation_enabled===true,active:x.active})));
     const paths=at.data||[],signed={};await Promise.all(paths.map(async a=>{const {data:s}=await sb.storage.from('ticket-attachments').createSignedUrl(a.storage_path,3600);signed[a.id]=s?.signedUrl}));
     replace(tickets,ti.data.map(x=>{const assigned=(ta.data||[]).filter(a=>a.ticket_id===x.id);return {dbId:x.id,id:x.protocol,title:x.title,category:x.categories?.name||'Sem categoria',categoryId:x.category_id,status:x.status,teacher:x.servers?.full_name||`SIAPE ${x.guest_siape} (cadastro pendente)`,teacherSiape:x.servers?.siape||x.guest_siape,teacherEmail:x.servers?.email||x.guest_email,serverId:x.server_id,registrationPending:!x.server_id,lab:x.labs?.name||'Não informado',labId:x.lab_id,time:fmt(x.created_at),createdAt:x.created_at,archivedAt:x.archived_at,technician:assigned.length?assigned.map(a=>a.assignee_profile?.full_name).filter(Boolean).join(', '):(x.status==='Recebido'?'Não atribuído':'Toda a equipe'),technicianIds:assigned.map(a=>a.profile_id),technicianId:x.assigned_to,description:x.description,resolution:x.resolution,closedAt:x.closed_at?fmt(x.closed_at):null,closedAtRaw:x.closed_at,attachments:paths.filter(a=>a.ticket_id===x.id).map(a=>({id:a.id,path:a.storage_path,name:a.file_name,url:signed[a.id]}))}}));
     replace(data.teachers,data.teachers.filter(x=>x.active!==false));
@@ -407,7 +408,7 @@
     $('#accountName').textContent=p.full_name;
     $('#accountMenuName').textContent=p.full_name;
     $('#accountEmail').textContent=p.email;
-    $('#accountRole').textContent=p.role==='supervisor'?'Supervisor':'Técnico';
+    $('#accountRole').textContent=p.is_admin||p.role==='admin'?'Administrador':p.role==='supervisor'?'Supervisor':'Técnico';
     $('#accountAvatar').textContent=p.full_name.trim().split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
     const menuButtons=document.querySelectorAll('.topbar-admin-actions [data-admin-nav]');
     menuButtons.forEach(b=>b.hidden=false);
@@ -415,7 +416,7 @@
       menuButtons.forEach(b=>b.hidden=b.dataset.section!=='supervisor'&&b.id!=='reservationsMenuButton');
       openAdminRoute(adminRouteSlug==='reservas'?'reservas':'supervisor');
     }else{
-      openAdminRoute(adminRouteSlug||'chamados');
+      openAdminRoute(adminRouteSlug||'reservas');
     }
     await initStaffChatStatus();
     listenIncomingChats();
@@ -478,7 +479,7 @@
   document.body.insertAdjacentHTML('beforeend','<div id="staffEmailModal" class="modal-backdrop" hidden><div class="card login-card"><div class="modal-heading"><div><span class="eyebrow">LOGIN DO USUÁRIO</span><h2>Alterar e-mail</h2><p id="staffEmailIdentity"></p></div><button id="closeStaffEmail" class="modal-close" type="button">×</button></div><form id="staffEmailForm"><input id="staffEmailUserId" type="hidden"><label>Novo e-mail institucional<input id="staffNewEmail" type="email" placeholder="nome@ifms.edu.br" required></label><p id="staffEmailError" class="login-error"></p><button class="primary" type="submit">Atualizar e-mail de login</button></form></div></div>');
   const staffEmailModal=$('#staffEmailModal'),closeStaffEmail=()=>{staffEmailModal.hidden=true;document.body.classList.remove('modal-open');$('#staffEmailForm').reset();$('#staffEmailError').textContent=''};$('#closeStaffEmail').onclick=closeStaffEmail;staffEmailModal.onclick=e=>{if(e.target===staffEmailModal)closeStaffEmail()};
   $('#staffEmailForm').onsubmit=async e=>{e.preventDefault();const email=$('#staffNewEmail').value.trim().toLowerCase(),errorBox=$('#staffEmailError');errorBox.textContent='';setProcessing(true,'Atualizando usuário…');try{if(!/^[^\s@]+@ifms\.edu\.br$/i.test(email)){errorBox.textContent='Informe um e-mail institucional @ifms.edu.br.';return}const response=await sb.functions.invoke('create-staff',{body:{action:'update-email',user_id:$('#staffEmailUserId').value,email}});if(response.error||!response.data?.ok){let message=response.data?.error||response.error?.message||'Não foi possível alterar o e-mail.';try{const body=await response.error?.context?.json();message=body?.error||message}catch{}errorBox.textContent=message;return}closeStaffEmail();await loadAdmin();registration();toast('E-mail de login atualizado com sucesso.')}catch(error){errorBox.textContent=error?.message||'Não foi possível alterar o e-mail.'}finally{setProcessing(false)}};
-  const originalRegistration=registration;registration=function(){originalRegistration();if(regType==='technicians')$('#registrationFields').insertAdjacentHTML('beforeend','<input name="staff_user_id" type="hidden"><label>Perfil<select name="role"><option value="tecnico">Técnico</option><option value="supervisor">Supervisor</option></select></label><label id="staffPasswordLabel">Senha inicial<input name="password" type="password" minlength="8" required></label><button id="cancelStaffEdit" class="secondary cancel-staff-edit" type="button" hidden>Cancelar edição</button>');if(regType==='labs')$('#registrationFields').insertAdjacentHTML('beforeend','<input name="lab_id" type="hidden"><label>Código do protocolo<input name="code" placeholder="Ex.: LAB05"></label><label>Quantidade de computadores<input name="computer_count" type="number" min="0" step="1" value="0" required></label><label>Sistema operacional<input name="operating_system" placeholder="Ex.: Windows 11 Pro / Ubuntu 24.04 (Dual Boot)" maxlength="80"></label><label class="lab-reservation-option"><input name="reservation_enabled" type="checkbox" value="true"><span><strong>Disponível para reservas</strong><small>Exibir este laboratório na agenda e nos formulários públicos de reserva. Desmarcado, ele continuará disponível para chamados.</small></span></label><button id="cancelLabEdit" class="secondary cancel-lab-edit" type="button" hidden>Cancelar edição</button>');$('#registrationForm').onsubmit=saveRegistration};
+  const originalRegistration=registration;registration=function(){originalRegistration();if(regType==='technicians')$('#registrationFields').insertAdjacentHTML('beforeend','<input name="staff_user_id" type="hidden"><label>Perfil<select name="role"><option value="tecnico">Técnico</option><option value="supervisor">Supervisor</option><option value="admin">Administrador</option></select></label><label id="staffPasswordLabel" hidden>Senha técnica temporária<input name="password" type="hidden"></label><button id="cancelStaffEdit" class="secondary cancel-staff-edit" type="button" hidden>Cancelar edição</button>');if(regType==='labs'){const sectorOptions=(window.siglabSectors||[]).filter(item=>item.reservation_mode==='internal'&&item.active!==false).map(item=>`<option value="${item.id}">${safe(item.name)}</option>`).join('');$('#registrationFields').insertAdjacentHTML('beforeend',`<input name="lab_id" type="hidden"><label>Setor responsável<select name="sector_id" required><option value="">Selecione o setor</option>${sectorOptions}</select></label><label>Código do laboratório<input name="code" placeholder="Ex.: FIS01"></label><label>Quantidade de computadores ou bancadas<input name="computer_count" type="number" min="0" step="1" value="0" required></label><label>Sistema operacional ou observação técnica<input name="operating_system" maxlength="80"></label><label class="lab-reservation-option"><input name="reservation_enabled" type="checkbox" value="true"><span><strong>Disponível para reservas</strong><small>Exibir este laboratório na agenda pública do setor.</small></span></label><button id="cancelLabEdit" class="secondary cancel-lab-edit" type="button" hidden>Cancelar edição</button>`)}$('#registrationForm').onsubmit=saveRegistration};
   const saveRegistrationBase=saveRegistration;saveRegistration=async function(event){await saveRegistrationBase(event);await new Promise(resolve=>setTimeout(resolve,400));await loadAdmin();registration();setProcessing(false)};$('#registrationForm').onsubmit=saveRegistration;
   document.addEventListener('submit',event=>{if(event.target.matches('#registrationForm'))setProcessing(true,'Salvando cadastro…')});
   document.addEventListener('click',event=>{if(event.target.closest('.delete-button'))setProcessing(true,'Desativando cadastro…');if(event.target.closest('#importServerCsv'))setProcessing(true,'Importando servidores…')});
@@ -486,7 +487,7 @@
     if(!event.target.matches('#registrationForm')||regType!=='labs')return;
     event.preventDefault();event.stopImmediatePropagation();setProcessing(true,'Salvando laboratório…');
     const form=event.target,entry=Object.fromEntries(new FormData(form)),code=String(entry.code||'').trim().toUpperCase();
-    const payload={name:String(entry.name).trim(),location:String(entry.location||'').trim(),code:code||null,computer_count:Math.max(0,Number(entry.computer_count)||0),operating_system:String(entry.operating_system||'').trim()||null,reservation_enabled:entry.reservation_enabled==='true',active:true};
+    const payload={name:String(entry.name).trim(),location:String(entry.location||'').trim(),code:code||null,sector_id:entry.sector_id||null,computer_count:Math.max(0,Number(entry.computer_count)||0),operating_system:String(entry.operating_system||'').trim()||null,reservation_enabled:entry.reservation_enabled==='true',active:true};
     const result=entry.lab_id?await sb.from('labs').update(payload).eq('id',entry.lab_id).select().single():await sb.from('labs').upsert(payload,{onConflict:code?'code':'name'}).select().single();
     if(result.error)return fail(result.error,'Não foi possível salvar o laboratório.');
     form.reset();await loadAdmin();registration();toast(payload.reservation_enabled?'Laboratório salvo e disponibilizado para chamados e reservas.':'Laboratório salvo e disponibilizado somente para chamados.');
@@ -552,6 +553,7 @@
       form.elements.name.value=lab.name||'';
       form.elements.location.value=lab.location||'';
       form.elements.code.value=lab.code||'';
+      if(form.elements.sector_id)form.elements.sector_id.value=lab.sectorId||'';
       form.elements.computer_count.value=Number(lab.computerCount)||0;
       form.elements.operating_system.value=lab.operatingSystem||'';
       form.elements.reservation_enabled.checked=lab.reservationEnabled===true;
@@ -2181,5 +2183,11 @@
   loadServiceHours();
   loadChatAvailability();
   confirmFeedbackFromLink();
+  window.addEventListener('siglab:institutional-auth',event=>{
+    if(isAdminRoute&&event.detail?.staff&&!state.profile)enterAdmin().then(startAdminSynchronization);
+    if(isAdminRoute&&event.detail?.session&&!event.detail?.staff){
+      openLogin();$('#loginError').textContent='Esta conta institucional não está cadastrada como técnico do SIGLAB.';
+    }
+  });
   if (isAdminRoute) enterAdmin().then(startAdminSynchronization);
 })();

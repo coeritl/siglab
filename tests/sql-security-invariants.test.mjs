@@ -38,17 +38,15 @@ test('create_ticket_from_chat exige técnico/supervisor autenticado no corpo da 
   assert.match(latest, /raise exception/i, 'A definição mais recente de create_ticket_from_chat não interrompe a execução para chamadores não autorizados.');
 });
 
-test('RPCs públicas esperadas continuam acessíveis por anon', () => {
+test('RPCs públicas legadas ainda usadas fora de reservas continuam acessíveis por anon', () => {
   // Funções que o site público (visitante não autenticado) precisa poder
   // chamar. Se um destes falhar, o site quebra para o público mesmo que a
   // função exista — normalmente sinal de um "revoke" sem o "grant" correspondente.
   const publicFunctions = [
     'create_public_ticket',
-    'identify_server',
     'request_chat_session',
     'send_chat_message',
     'get_public_chat_messages',
-    'create_public_reservation_range',
     'confirm_ticket_feedback',
     'my_tickets',
   ];
@@ -56,6 +54,28 @@ test('RPCs públicas esperadas continuam acessíveis por anon', () => {
     const grants = resolveFunctionGrants(corpus, fn);
     assert.ok(grants.seen, `Função pública esperada não encontrada: ${fn}`);
     assert.equal(grants.canExecute('anon'), true, `A função pública ${fn} não está (mais) acessível para o role anon.`);
+  }
+});
+
+test('reservas do SIGLAB exigem identidade Google autenticada', () => {
+  for (const fn of ['identify_server','create_public_reservation_range','request_reservation_access']) {
+    const grants = resolveFunctionGrants(corpus, fn);
+    assert.ok(grants.seen, `Função legada não encontrada: ${fn}`);
+    assert.equal(grants.canExecute('anon'), false, `${fn} não pode permanecer acessível ao visitante anônimo.`);
+  }
+  for (const fn of ['get_my_ifms_identity','create_my_reservation_range','list_my_reservations']) {
+    const grants = resolveFunctionGrants(corpus, fn);
+    assert.ok(grants.seen, `Função autenticada do SIGLAB não encontrada: ${fn}`);
+    assert.equal(grants.canExecute('anon'), false, `${fn} não deve aceitar chamadas anônimas.`);
+    assert.equal(grants.canExecute('authenticated'), true, `${fn} deve aceitar usuários autenticados.`);
+  }
+});
+
+test('funções de reserva da equipe validam o laboratório do setor', () => {
+  for (const fn of ['staff_create_reservation_range','staff_edit_reservation_range_notification','staff_delete_reservation']) {
+    const matches=[...corpus.matchAll(new RegExp(`create or replace function public\\.${fn}\\([\\s\\S]*?end \\$\\$;`,'gi'))];
+    assert.ok(matches.length, `Função não encontrada: ${fn}`);
+    assert.match(matches.at(-1)[0], /can_manage_lab/i, `${fn} não verifica o setor responsável pelo laboratório.`);
   }
 });
 
