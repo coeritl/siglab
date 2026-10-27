@@ -203,7 +203,7 @@
   function renderPublicLabCards(){
     const selected=$('#publicScheduleLab').value;
     $('#publicLabCards').innerHTML=publicLabs.map(lab=>{
-      const isSel=selected===lab.id,count=Number(lab.computer_count)||0,os=lab.operating_system?safe(lab.operating_system):'';
+      const isSel=selected===lab.id;
       return `<button class="public-lab-card ${isSel?'selected':''}" type="button" data-lab="${lab.id}" aria-pressed="${isSel}">
         <div class="lab-card-header">
           <div class="public-lab-icon" aria-hidden="true">
@@ -213,16 +213,6 @@
             <strong class="lab-card-name">${safe(lab.name)}</strong>
             <span class="lab-card-location">${safe(lab.location||'Localização não informada')}</span>
           </div>
-        </div>
-        <div class="lab-card-specs">
-          <span class="lab-spec-chip lab-spec-pc">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
-            ${count} ${count===1?'computador':'computadores'}
-          </span>
-          ${os?`<span class="lab-spec-chip lab-spec-os" title="Sistema operacional: ${os}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-            ${os}
-          </span>`:''}
         </div>
         <div class="lab-card-footer">
           <span class="lab-card-status-badge ${isSel?'active':'available'}">${isSel?'● Aberto':'● Disponível'}</span>
@@ -235,9 +225,9 @@
       if(!lab)return;
       $('#publicScheduleLab').value=lab.id;
       $('#reservationLab').value=lab.id;
-      $('#reservationSelectedLab').innerHTML=`<strong>${safe(lab.name)}</strong><span>${safe(lab.location||'Localização não informada')} • ${Number(lab.computer_count)||0} computador(es)${lab.operating_system ? ' • SO: ' + safe(lab.operating_system) : ''}</span>`;
+      $('#reservationSelectedLab').innerHTML=`<strong>${safe(lab.name)}</strong><span>${safe(lab.location||'Localização não informada')}</span>`;
       $('#publicScheduleTitle').textContent=lab.name;
-      $('#publicScheduleDescription').textContent=`${lab.location||'Localização não informada'} • ${Number(lab.computer_count)||0} computador(es) disponíveis${lab.operating_system ? ' • SO: ' + lab.operating_system : ''}`;
+      $('#publicScheduleDescription').textContent=lab.location||'Localização não informada';
       $('#publicScheduleCard').hidden=false;
       renderPublicLabCards();
       await loadPublicSchedule();

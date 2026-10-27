@@ -201,12 +201,11 @@
           <label>Nome<input name="name" maxlength="120" required></label>
           <label>Setor responsável<select name="sector_id" required><option value="">Selecione o setor</option>${sectorOptions}</select></label>
           <div class="field-row"><label>Código<input name="code" maxlength="30"></label><label>Localização<input name="location" maxlength="120"></label></div>
-          <div class="field-row"><label>Computadores<input name="computer_count" type="number" min="0" value="0"></label><label>Sistema operacional<input name="operating_system" maxlength="100"></label></div>
           <label class="siglab-check"><input name="reservation_enabled" type="checkbox"><span>Exibir publicamente para reserva</span></label>
           <button class="primary" type="submit">Salvar laboratório</button>
         </form>
         <section class="card siglab-registry-list"><header><div><span class="eyebrow">ESPAÇOS</span><h2>${labs.length} cadastro(s)</h2></div></header><div>${labs.map(lab => `
-          <article><div><strong>${safe(lab.name)}</strong><span>${safe(lab.sectors?.name || 'Setor não definido')} · ${safe(lab.location || 'Local não informado')} · ${Number(lab.computer_count || 0)} computador(es)</span></div><label class="siglab-inline-check"><input type="checkbox" data-lab-public="${lab.id}" ${lab.reservation_enabled ? 'checked' : ''}><span>Público</span></label><button class="${lab.active === false ? 'secondary' : 'danger-button'}" data-lab-active="${lab.id}" data-next="${lab.active === false}">${lab.active === false ? 'Reativar' : 'Desativar'}</button></article>
+          <article><div><strong>${safe(lab.name)}</strong><span>${safe(lab.sectors?.name || 'Setor não definido')} · ${safe(lab.location || 'Local não informado')}</span></div><label class="siglab-inline-check"><input type="checkbox" data-lab-public="${lab.id}" ${lab.reservation_enabled ? 'checked' : ''}><span>Público</span></label><button class="${lab.active === false ? 'secondary' : 'danger-button'}" data-lab-active="${lab.id}" data-next="${lab.active === false}">${lab.active === false ? 'Reativar' : 'Desativar'}</button></article>
         `).join('') || '<p class="empty">Nenhum laboratório cadastrado.</p>'}</div></section>
       </div>`;
 
@@ -217,8 +216,6 @@
         name: form.get('name').trim(), code: form.get('code').trim() || null,
         sector_id: form.get('sector_id'),
         location: form.get('location').trim() || null,
-        computer_count: Number(form.get('computer_count') || 0),
-        operating_system: form.get('operating_system').trim() || null,
         reservation_enabled: form.has('reservation_enabled'), active: true
       };
       const { error: insertError } = await sb.from('labs').insert(payload);

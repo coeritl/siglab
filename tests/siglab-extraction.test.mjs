@@ -4,6 +4,13 @@ import test from 'node:test';
 
 const read = file => readFile(new URL(`../${file}`, import.meta.url), 'utf8');
 
+test('espaços do SIGLAB não exibem especificações exclusivas de informática', async () => {
+  const [app, reservations] = await Promise.all([read('siglab-app.js'), read('reservations.js')]);
+  assert.doesNotMatch(app, /name="computer_count"|name="operating_system"|computador\(es\)/);
+  const cards = reservations.slice(reservations.indexOf('function renderPublicLabCards'), reservations.indexOf('async function loadPublicLabs'));
+  assert.doesNotMatch(cards, /computer_count|operating_system|lab-spec-pc|lab-spec-os/);
+});
+
 test('a página publicada carrega apenas a aplicação SIGLAB e o módulo de reservas', async () => {
   const html = await read('index.html');
   assert.match(html, /src="siglab-app\.js(?:\?v=[^"]+)?"/);
