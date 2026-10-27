@@ -38,13 +38,15 @@
     window.scrollTo(0, 0);
   }
 
-  function openReservations() {
-    if (typeof window.labinfoShowPublic === 'function') window.labinfoShowPublic('reservations');
+  function openReservations(group = 'all') {
+    window.siglabReservationGroup = group;
+    if (typeof window.siglabOpenReservationGroup === 'function') window.siglabOpenReservationGroup(group);
+    else if (typeof window.labinfoShowPublic === 'function') window.labinfoShowPublic('reservations');
     else setPublicView('reservations');
   }
 
-  $('#headerScheduleButton').onclick = openReservations;
-  $('#homeAdminButton').onclick = () => requestAdmin();
+  $('#headerScheduleButton').onclick = () => openReservations('all');
+  $('#homeAdminButton')?.addEventListener('click', () => requestAdmin());
   $('#adminToggle').onclick = () => requestAdmin();
   $('.siglab-brand').onclick = event => {
     event.preventDefault();
@@ -164,20 +166,25 @@
   async function renderLabs() {
     const section = $('#labsSection');
     section.innerHTML = '<div class="card siglab-loading">Carregando laboratórios…</div>';
-    const { data: labs, error } = await sb.from('labs').select('*').order('name');
-    if (error) return section.innerHTML = `<div class="card siglab-error">${safe(error.message)}</div>`;
+    const [{ data: labs, error }, { data: sectors, error: sectorsError }] = await Promise.all([
+      sb.from('labs').select('*,sectors(name,slug)').order('name'),
+      sb.from('sectors').select('id,name,slug').eq('active', true).eq('reservation_mode', 'internal').order('sort_order').order('name')
+    ]);
+    if (error || sectorsError) return section.innerHTML = `<div class="card siglab-error">${safe((error || sectorsError).message)}</div>`;
+    const sectorOptions = (sectors || []).map(sector => `<option value="${sector.id}">${safe(sector.name)}</option>`).join('');
     section.innerHTML = `
       <div class="siglab-registry-grid">
         <form id="labRegistryForm" class="card siglab-registry-form">
           <span class="eyebrow">NOVO ESPAÇO</span><h2>Cadastrar laboratório</h2>
           <label>Nome<input name="name" maxlength="120" required></label>
+          <label>Setor responsável<select name="sector_id" required><option value="">Selecione o setor</option>${sectorOptions}</select></label>
           <div class="field-row"><label>Código<input name="code" maxlength="30"></label><label>Localização<input name="location" maxlength="120"></label></div>
           <div class="field-row"><label>Computadores<input name="computer_count" type="number" min="0" value="0"></label><label>Sistema operacional<input name="operating_system" maxlength="100"></label></div>
           <label class="siglab-check"><input name="reservation_enabled" type="checkbox"><span>Exibir publicamente para reserva</span></label>
           <button class="primary" type="submit">Salvar laboratório</button>
         </form>
         <section class="card siglab-registry-list"><header><div><span class="eyebrow">ESPAÇOS</span><h2>${labs.length} cadastro(s)</h2></div></header><div>${labs.map(lab => `
-          <article><div><strong>${safe(lab.name)}</strong><span>${safe(lab.location || 'Local não informado')} · ${Number(lab.computer_count || 0)} computador(es)</span></div><label class="siglab-inline-check"><input type="checkbox" data-lab-public="${lab.id}" ${lab.reservation_enabled ? 'checked' : ''}><span>Público</span></label><button class="${lab.active === false ? 'secondary' : 'danger-button'}" data-lab-active="${lab.id}" data-next="${lab.active === false}">${lab.active === false ? 'Reativar' : 'Desativar'}</button></article>
+          <article><div><strong>${safe(lab.name)}</strong><span>${safe(lab.sectors?.name || 'Setor não definido')} · ${safe(lab.location || 'Local não informado')} · ${Number(lab.computer_count || 0)} computador(es)</span></div><label class="siglab-inline-check"><input type="checkbox" data-lab-public="${lab.id}" ${lab.reservation_enabled ? 'checked' : ''}><span>Público</span></label><button class="${lab.active === false ? 'secondary' : 'danger-button'}" data-lab-active="${lab.id}" data-next="${lab.active === false}">${lab.active === false ? 'Reativar' : 'Desativar'}</button></article>
         `).join('') || '<p class="empty">Nenhum laboratório cadastrado.</p>'}</div></section>
       </div>`;
 
@@ -186,6 +193,7 @@
       const form = new FormData(event.target);
       const payload = {
         name: form.get('name').trim(), code: form.get('code').trim() || null,
+        sector_id: form.get('sector_id'),
         location: form.get('location').trim() || null,
         computer_count: Number(form.get('computer_count') || 0),
         operating_system: form.get('operating_system').trim() || null,
@@ -261,5 +269,5 @@
   const route = params.get('route') || location.pathname.slice(siteBase.length).replace(/^\/+|\/+$/g, '');
   const reservationLink = ['confirm_reservation', 'cancel_reservation', 'manage_reservations', 'confirm_cancel_request'].some(key => params.has(key));
   if (route.startsWith('admin')) setTimeout(requestAdmin, 0);
-  else if (route === 'reservas' || reservationLink) setTimeout(openReservations, 0);
+  else if (route === 'reservas' || reservationLink) setTimeout(() => openReservations(params.get('grupo') || 'all'), 0);
 })();

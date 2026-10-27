@@ -94,23 +94,91 @@
     $('#reservationDate').min = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Cuiaba' });
   }
 
-  let publicServer=null,publicLabs=[],publicScheduleRows=[],publicWeekStart=publicMonday(new Date());
+  let publicServer=null,allPublicLabs=[],publicLabs=[],publicLabsLoaded=false,publicLabGroup=window.siglabReservationGroup||'all',publicScheduleRows=[],publicWeekStart=publicMonday(new Date());
+
+  function publicGroupContent(){
+    if(publicLabGroup==='eletrotecnica')return {
+      title:'Agenda da Eletrotécnica',
+      subtitle:'Selecione um laboratório de Eletrotécnica para consultar a disponibilidade e solicitar uma reserva.',
+      picker:'Laboratórios de Eletrotécnica',
+      description:'Escolha um espaço do setor para abrir o calendário.',
+      empty:'Nenhum laboratório de Eletrotécnica está disponível para reserva.'
+    };
+    if(publicLabGroup==='diversos')return {
+      title:'Agenda dos laboratórios diversos',
+      subtitle:'Consulte os espaços de Física, Química e dos demais setores disponíveis no SIGLAB.',
+      picker:'Laboratórios diversos',
+      description:'Escolha um setor e um espaço para abrir o calendário.',
+      empty:'Nenhum laboratório dos demais setores está disponível para reserva.'
+    };
+    return {
+      title:'Agenda dos laboratórios',
+      subtitle:'Selecione um espaço para consultar a disponibilidade e solicitar uma reserva.',
+      picker:'Escolha um laboratório',
+      description:'O calendário será aberto após a seleção.',
+      empty:'Nenhum laboratório disponível.'
+    };
+  }
+
+  function publicLabSectorKey(lab){
+    return normalize([
+      lab?.sectors?.slug,lab?.sectors?.name,lab?.sector_slug,lab?.sector_name,
+      lab?.name,lab?.code,lab?.location
+    ].filter(Boolean).join(' '));
+  }
+
+  function publicLabMatchesGroup(lab){
+    const key=publicLabSectorKey(lab);
+    if(publicLabGroup==='eletrotecnica')return key.includes('eletrotecnica');
+    if(publicLabGroup==='diversos')return !key.includes('informatica')&&!key.includes('eletrotecnica');
+    return !key.includes('informatica');
+  }
+
+  function applyPublicLabGroup(){
+    publicLabs=allPublicLabs.filter(publicLabMatchesGroup);
+    const content=publicGroupContent();
+    setText('#publicReservationTitle',content.title);
+    setText('#publicReservationSubtitle',content.subtitle);
+    setText('#publicLabPickerTitle',content.picker);
+    setText('#publicLabPickerDescription',content.description);
+    const options=publicLabs.map(lab=>`<option value="${lab.id}">${safe(lab.name)}</option>`).join('');
+    $('#reservationLab').innerHTML='<option value="">Selecione o laboratório</option>'+options;
+    $('#publicScheduleLab').innerHTML='<option value=""></option>'+options;
+    $('#publicScheduleCard').hidden=true;
+    $('#reservationSelectedLab').innerHTML='<strong>Laboratório</strong><span>Selecione um dos espaços nos cards acima.</span>';
+    renderPublicLabCards();
+  }
 
   function showPublic(view,push=true){
     document.body.classList.remove('admin-route');
     if($('#homeView'))$('#homeView').hidden=view!=='home';
     if($('#reservationsPublicView'))$('#reservationsPublicView').hidden=view!=='reservations';
     if($('#adminView'))$('#adminView').hidden=true;
-    if(push)history.pushState({},'',view==='reservations'?sitePath('reservas'):sitePath(''));
+    if(push){
+      const groupQuery=publicLabGroup!=='all'?`?grupo=${encodeURIComponent(publicLabGroup)}`:'';
+      history.pushState({},'',view==='reservations'?sitePath('reservas')+groupQuery:sitePath(''));
+    }
     window.scrollTo(0,0);
-    if(view==='reservations'&&publicLabs.length===0){
+    if(view==='reservations'&&!publicLabsLoaded){
       loadPublicLabs();
     }
   }
   window.labinfoShowPublic=showPublic;
+  window.siglabOpenReservationGroup=group=>{
+    publicLabGroup=['eletrotecnica','diversos'].includes(group)?group:'all';
+    window.siglabReservationGroup=publicLabGroup;
+    if(publicLabsLoaded)applyPublicLabGroup();
+    showPublic('reservations');
+  };
 
   // Delegação global de navegação no documento inteiro
   document.addEventListener('click',event=>{
+    const groupedReservationButton=event.target.closest('[data-reservation-group]');
+    if(groupedReservationButton){
+      event.preventDefault();
+      window.siglabOpenReservationGroup(groupedReservationButton.dataset.reservationGroup);
+      return;
+    }
     if(event.target.closest('#openReservations')){event.preventDefault();showPublic('reservations');return}
     if(event.target.closest('#backHome')){event.preventDefault();showPublic('home');return}
     if(event.target.closest('#reservationsMenuButton, [data-section="reservations"], #reviewReservationsButton')){
@@ -126,7 +194,9 @@
   });
 
   window.addEventListener('popstate',()=>{const path=location.pathname,isAdmin=path.includes('/admin');if(!isAdmin&&path.includes('/reservas'))showPublic('reservations',false);else if(!isAdmin)showPublic('home',false)});
-  const initialParams=new URLSearchParams(location.search),initialPublicRoute=initialParams.get('route'),initialIsAdmin=initialPublicRoute?.startsWith('admin')||location.pathname.includes('/admin');if(!initialIsAdmin&&(location.pathname.includes('/reservas')||initialPublicRoute==='reservas'||initialParams.has('confirm_reservation')||initialParams.has('cancel_reservation')||initialParams.has('manage_reservations')||initialParams.has('confirm_cancel_request')))showPublic('reservations',false);
+  const initialParams=new URLSearchParams(location.search),initialPublicRoute=initialParams.get('route'),initialIsAdmin=initialPublicRoute?.startsWith('admin')||location.pathname.includes('/admin');
+  if(['eletrotecnica','diversos'].includes(initialParams.get('grupo'))){publicLabGroup=initialParams.get('grupo');window.siglabReservationGroup=publicLabGroup}
+  if(!initialIsAdmin&&(location.pathname.includes('/reservas')||initialPublicRoute==='reservas'||initialParams.has('confirm_reservation')||initialParams.has('cancel_reservation')||initialParams.has('manage_reservations')||initialParams.has('confirm_cancel_request')))showPublic('reservations',false);
 
   function publicMonday(value){const date=new Date(value);date.setHours(12,0,0,0);const day=date.getDay()||7;date.setDate(date.getDate()-day+1);return date}
   const publicIsoDate=date=>date.toLocaleDateString('en-CA',{timeZone:'America/Cuiaba'}),publicAddDays=(date,days)=>{const copy=new Date(date);copy.setDate(copy.getDate()+days);return copy};
@@ -159,7 +229,7 @@
           <span class="lab-card-action">${isSel?'Agenda selecionada ✓':'Ver agenda →'}</span>
         </div>
       </button>`;
-    }).join('')||'<p class="empty">Nenhum laboratório disponível.</p>';
+    }).join('')||`<p class="empty">${safe(publicGroupContent().empty)}</p>`;
     $('#publicLabCards').querySelectorAll('[data-lab]').forEach(button=>button.onclick=async()=>{
       const lab=publicLabs.find(item=>item.id===button.dataset.lab);
       if(!lab)return;
@@ -176,20 +246,21 @@
   }
   async function loadPublicLabs(){
     if(!getDb()){
-      publicLabs=[
-        {id:'demo-info-1',name:'Laboratório de Informática 1',code:'INFO-01',location:'Bloco de laboratórios',computer_count:30,operating_system:'A definir'},
-        {id:'demo-info-2',name:'Laboratório de Informática 2',code:'INFO-02',location:'Bloco de laboratórios',computer_count:30,operating_system:'A definir'},
-        {id:'demo-hardware',name:'Laboratório de Hardware',code:'HARD-01',location:'Bloco de laboratórios',computer_count:20,operating_system:'Uso especializado'}
+      allPublicLabs=[
+        {id:'demo-eletro-1',name:'Laboratório de Eletrotécnica 1',code:'ELETRO-01',location:'Bloco de laboratórios',computer_count:0,operating_system:null,sectors:{slug:'eletrotecnica',name:'Eletrotécnica'}},
+        {id:'demo-fisica',name:'Laboratório de Física',code:'FIS-01',location:'Bloco de laboratórios',computer_count:0,operating_system:null,sectors:{slug:'fisica',name:'Física'}},
+        {id:'demo-quimica',name:'Laboratório de Química',code:'QUI-01',location:'Bloco de laboratórios',computer_count:0,operating_system:null,sectors:{slug:'quimica',name:'Química'}}
       ];
     }else{
-      const {data,error}=await sb.from('labs').select('id,name,code,location,computer_count,operating_system').eq('active',true).eq('reservation_enabled',true).order('name');
-      if(error){toast(error.message);return}
-      publicLabs=data||[];
+      let result=await sb.from('labs').select('id,name,code,location,computer_count,operating_system,sector_id,sectors(name,slug,reservation_mode)').eq('active',true).eq('reservation_enabled',true).order('name');
+      if(result.error){
+        result=await sb.from('labs').select('id,name,code,location,computer_count,operating_system').eq('active',true).eq('reservation_enabled',true).order('name');
+      }
+      if(result.error){toast(result.error.message);return}
+      allPublicLabs=result.data||[];
     }
-    const options=publicLabs.map(lab=>`<option value="${lab.id}">${safe(lab.name)}</option>`).join('');
-    $('#reservationLab').innerHTML='<option value="">Selecione o laboratório</option>'+options;
-    $('#publicScheduleLab').innerHTML='<option value=""></option>'+options;
-    renderPublicLabCards();
+    publicLabsLoaded=true;
+    applyPublicLabGroup();
   }
   async function loadPublicSchedule(){
     const lab=$('#publicScheduleLab').value||publicLabs[0]?.id;

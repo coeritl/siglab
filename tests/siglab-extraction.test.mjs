@@ -13,12 +13,17 @@ test('a página publicada carrega apenas a aplicação SIGLAB e o módulo de res
   assert.doesNotMatch(html, /id="chatPublicView"|id="ticketForm"|Fila de atendimento/);
 });
 
-test('a página inicial separa as reservas do SIGLAB e dos laboratórios de informática', async () => {
-  const html = await read('index.html');
+test('a página inicial separa Informática, Eletrotécnica e laboratórios diversos', async () => {
+  const [html, reservations] = await Promise.all([read('index.html'), read('reservations.js')]);
   assert.match(html, /id="openReservations"/);
-  assert.match(html, /DEMAIS LABORATÓRIOS/);
   assert.match(html, /href="https:\/\/labinfo\.tl\.ifms\.edu\.br\/reservas\/"/);
   assert.match(html, /LABORATÓRIOS DE INFORMÁTICA/);
+  assert.match(html, /data-reservation-group="eletrotecnica"/);
+  assert.match(html, /LABORATÓRIOS DE ELETROTÉCNICA/);
+  assert.match(html, /data-reservation-group="diversos"/);
+  assert.match(html, /LABORATÓRIOS DIVERSOS/);
+  assert.match(reservations, /publicLabMatchesGroup/);
+  assert.match(reservations, /sectors\(name,slug,reservation_mode\)/);
 });
 
 test('as rotas do GitHub Pages usam a base independente /siglab', async () => {
