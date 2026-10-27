@@ -24,12 +24,8 @@ body:has(#homeView:not([hidden])) .siglab-topbar { display: none; }
 .siglab-google-login:hover { background: var(--green-dark); }
 .siglab-google-login:disabled { opacity: .65; cursor: wait; }
 .siglab-google-login > span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 5px; background: #fff; color: #4285f4; font-size: 21px; font-weight: 800; }
-.siglab-service-grid .service-choice { min-height: 210px !important; text-align: center; }
-.siglab-service-grid .service-choice-icon { margin: 0 auto 20px; }
-.siglab-service-grid .service-choice strong { margin: 0; font-size: 23px; }
 @media(max-width:620px) {
   .siglab-google-login { padding: 11px 13px; font-size: 13px; }
-  .siglab-service-grid .service-choice { min-height: 160px !important; }
 }
 
 /* A identidade do SIGLAB segue a mesma família visual do LabInfo. */
@@ -406,4 +402,92 @@ body > footer small { opacity: .72; }
   .reservation-public-head .secondary { width: max-content; }
   .public-week-navigation { display: grid; grid-template-columns: 1fr 1fr; }
   .public-week-navigation strong { grid-row: 1; grid-column: 1 / 3; margin-bottom: 8px; text-align: center; }
+}
+
+/* Portas de entrada: ícone e título ancorados, com direção de navegação. */
+.siglab-service-grid .service-choice {
+  --card-accent: #11733c;
+  --card-tint: #e7f4eb;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-height: 248px;
+  padding: 28px;
+  overflow: hidden;
+  border: 1px solid #d4e3d9;
+  border-radius: 22px;
+  background: linear-gradient(145deg,#fff 48%,var(--card-tint));
+  text-align: left;
+  box-shadow: 0 9px 26px rgba(24,57,36,.06);
+}
+.siglab-service-grid .service-choice::before {
+  content: '';
+  position: absolute;
+  width: 165px;
+  height: 165px;
+  right: -68px;
+  top: -65px;
+  border: 22px solid var(--card-tint);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.siglab-service-grid #openElectricalReservations { --card-accent: #97621b; --card-tint: #fbf2df; }
+.siglab-service-grid #openReservations { --card-accent: #316978; --card-tint: #e9f3f5; }
+.siglab-service-grid .service-choice .service-choice-icon {
+  width: 68px;
+  height: 68px;
+  margin: 0 0 28px;
+  border: 1px solid color-mix(in srgb,var(--card-accent) 13%,transparent);
+  border-radius: 19px;
+  background: var(--card-tint);
+  color: var(--card-accent);
+}
+.siglab-service-grid .service-choice .service-choice-icon svg { width: 34px; height: 34px; }
+.siglab-service-grid .service-choice strong {
+  position: relative;
+  margin: 0;
+  padding-right: 33px;
+  color: #183526;
+  font-size: clamp(23px,2.1vw,28px);
+  letter-spacing: -.7px;
+  line-height: 1.2;
+}
+.siglab-service-grid .service-choice strong > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #617168;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.siglab-card-arrow {
+  position: absolute;
+  bottom: 29px;
+  right: 24px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--card-accent);
+  font-size: 23px;
+  transition: transform .2s;
+}
+.siglab-service-grid .service-choice:hover { border-color: var(--card-accent); }
+.siglab-service-grid .service-choice:hover .siglab-card-arrow { transform: translateX(3px); }
+.siglab-service-grid .service-choice:focus-visible { outline: 3px solid var(--card-accent); outline-offset: 4px; }
+@media(max-width:980px) {
+  .siglab-service-grid .service-choice { min-height: 144px; padding: 24px 64px 24px 110px; justify-content: center; }
+  .siglab-service-grid .service-choice .service-choice-icon { position: absolute; left: 23px; top: 50%; margin: 0; transform: translateY(-50%); }
+  .siglab-card-arrow { bottom: calc(50% - 17px); right: 22px; }
+}
+@media(max-width:620px) {
+  .siglab-service-grid .service-choice { min-height: 122px; padding: 20px 52px 20px 92px; }
+  .siglab-service-grid .service-choice .service-choice-icon { left: 18px; width: 56px; height: 56px; border-radius: 16px; }
+  .siglab-service-grid .service-choice strong { padding: 0; font-size: 22px; }
+  .siglab-service-grid .service-choice strong > span { font-size: 13px; }
+  .siglab-card-arrow { right: 14px; width: 28px; height: 28px; font-size: 20px; bottom: calc(50% - 14px); }
 }
