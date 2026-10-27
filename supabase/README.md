@@ -66,3 +66,9 @@ supabase functions deploy create-staff --no-verify-jwt
 
 A função aceita chamadas somente de um perfil `admin` ativo autenticado pelo
 Google IFMS. Nunca exponha a chave `service_role` no site.
+
+## Contas temporárias de homologação
+
+Depois de criar as três identidades de teste no Supabase Auth, execute
+`seeds/test-users.sql`. O seed cadastra os papéis de administrador, técnico de
+Eletrotécnica e servidor solicitante, sem armazenar senhas no repositório.
