@@ -302,38 +302,6 @@ insert into public.system_settings(key,value) values (
 ) on conflict do nothing;
 
 -- -----------------------------------------------------------------------------
--- migrations/20260813_email_reply_updates.sql
--- -----------------------------------------------------------------------------
--- Respostas a notificações são incorporadas ao histórico do chamado correspondente.
-create or replace function public.apps_script_register_inbound(
-  p_secret text,p_message_id text,p_sender text,p_subject text,p_body text
-) returns jsonb language plpgsql security definer set search_path=public as $$
-declare v_server public.servers; v_lab uuid; v_title text; v_protocol text; v_ticket uuid; v_existing public.tickets;
-begin
-  if not public.integration_secret_valid(p_secret) then raise exception 'Credencial inválida'; end if;
-  if exists(select 1 from public.email_inbox_log where gmail_message_id=p_message_id) then return jsonb_build_object('duplicate',true); end if;
-  select * into v_server from public.servers where lower(email)=lower(btrim(p_sender)) and active limit 1;
-  if v_server.id is null then
-    insert into public.email_inbox_log values(p_message_id,lower(p_sender),left(p_subject,300),null,'remetente_nao_cadastrado',now());
-    return jsonb_build_object('accepted',false,'reason','remetente_nao_cadastrado');
-  end if;
-  v_protocol:=(regexp_match(upper(p_subject),'(LAB[0-9]*-[0-9]+)'))[1];
-  if v_protocol is not null then select * into v_existing from public.tickets where protocol=v_protocol and server_id=v_server.id and status<>'Concluído' limit 1; end if;
-  if v_existing.id is not null then
-    insert into public.ticket_updates(ticket_id,author_id,message,kind,visible_to_server) values(v_existing.id,null,left(btrim(p_body),2000),'resposta_servidor',true);
-    update public.tickets set updated_at=now() where id=v_existing.id;
-    insert into public.email_inbox_log values(p_message_id,lower(p_sender),left(p_subject,300),v_existing.id,'resposta_adicionada',now());
-    return jsonb_build_object('accepted',true,'reply',true,'ticket_id',v_existing.id,'protocol',v_existing.protocol,'siape',v_server.siape);
-  end if;
-  select id into v_lab from public.labs where active and upper(p_subject) like '%'||upper(code)||'%' and code is not null order by length(code) desc limit 1;
-  v_title:=btrim(regexp_replace(p_subject,'^\s*CHAMADO\s*:\s*','', 'i')); if v_title='' then v_title:='Chamado recebido por e-mail'; end if;
-  v_protocol:=public.next_protocol(v_lab);
-  insert into public.tickets(protocol,server_id,lab_id,title,description,source) values(v_protocol,v_server.id,v_lab,left(v_title,100),left(btrim(p_body),2000),'Email') returning id into v_ticket;
-  insert into public.email_inbox_log values(p_message_id,lower(p_sender),left(p_subject,300),v_ticket,'criado',now());
-  return jsonb_build_object('accepted',true,'reply',false,'ticket_id',v_ticket,'protocol',v_protocol,'siape',v_server.siape);
-end $$;
-
--- -----------------------------------------------------------------------------
 -- migrations/20260813_google_apps_script.sql
 -- -----------------------------------------------------------------------------
 -- Integração segura entre Supabase e Google Apps Script.
@@ -509,63 +477,134 @@ grant execute on function public.apps_script_pull_outbox(text,integer) to anon;
 grant execute on function public.apps_script_finish_outbox(text,bigint,boolean,text) to anon;
 
 -- -----------------------------------------------------------------------------
--- migrations/20260813_maintenance_metrics.sql
+-- migrations/20260813_email_reply_updates.sql
 -- -----------------------------------------------------------------------------
-create table if not exists public.integration_runtime_metrics (
-  id boolean primary key default true check(id),
-  email_quota_remaining integer,
-  sent_today integer not null default 0,
-  sent_month integer not null default 0,
-  inbox_runs_today integer not null default 0,
-  outbox_runs_today integer not null default 0,
-  metric_day date not null default current_date,
-  metric_month date not null default date_trunc('month',current_date)::date,
-  last_inbox_run timestamptz,
-  last_outbox_run timestamptz,
-  updated_at timestamptz not null default now()
-);
-alter table public.integration_runtime_metrics enable row level security;
-drop policy if exists integration_metrics_read on public.integration_runtime_metrics;
-create policy integration_metrics_read on public.integration_runtime_metrics for select to authenticated
-using(public.current_role() in ('tecnico','supervisor'));
-insert into public.integration_runtime_metrics(id) values(true) on conflict do nothing;
-
-create or replace function public.apps_script_report_metrics(p_secret text,p_kind text,p_sent integer,p_remaining integer)
-returns void language plpgsql security definer set search_path=public as $$
+-- Respostas a notificações são incorporadas ao histórico do chamado correspondente.
+create or replace function public.apps_script_register_inbound(
+  p_secret text,p_message_id text,p_sender text,p_subject text,p_body text
+) returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_server public.servers; v_lab uuid; v_title text; v_protocol text; v_ticket uuid; v_existing public.tickets;
 begin
   if not public.integration_secret_valid(p_secret) then raise exception 'Credencial inválida'; end if;
-  update public.integration_runtime_metrics set
-    sent_today=case when metric_day=current_date then sent_today+greatest(p_sent,0) else greatest(p_sent,0) end,
-    sent_month=case when metric_month=date_trunc('month',current_date)::date then sent_month+greatest(p_sent,0) else greatest(p_sent,0) end,
-    inbox_runs_today=case when metric_day=current_date then inbox_runs_today+(p_kind='inbox')::int else (p_kind='inbox')::int end,
-    outbox_runs_today=case when metric_day=current_date then outbox_runs_today+(p_kind='outbox')::int else (p_kind='outbox')::int end,
-    metric_day=current_date,metric_month=date_trunc('month',current_date)::date,
-    email_quota_remaining=p_remaining,
-    last_inbox_run=case when p_kind='inbox' then now() else last_inbox_run end,
-    last_outbox_run=case when p_kind='outbox' then now() else last_outbox_run end,updated_at=now()
-  where id=true;
+  if exists(select 1 from public.email_inbox_log where gmail_message_id=p_message_id) then return jsonb_build_object('duplicate',true); end if;
+  select * into v_server from public.servers where lower(email)=lower(btrim(p_sender)) and active limit 1;
+  if v_server.id is null then
+    insert into public.email_inbox_log values(p_message_id,lower(p_sender),left(p_subject,300),null,'remetente_nao_cadastrado',now());
+    return jsonb_build_object('accepted',false,'reason','remetente_nao_cadastrado');
+  end if;
+  v_protocol:=(regexp_match(upper(p_subject),'(LAB[0-9]*-[0-9]+)'))[1];
+  if v_protocol is not null then select * into v_existing from public.tickets where protocol=v_protocol and server_id=v_server.id and status<>'Concluído' limit 1; end if;
+  if v_existing.id is not null then
+    insert into public.ticket_updates(ticket_id,author_id,message,kind,visible_to_server) values(v_existing.id,null,left(btrim(p_body),2000),'resposta_servidor',true);
+    update public.tickets set updated_at=now() where id=v_existing.id;
+    insert into public.email_inbox_log values(p_message_id,lower(p_sender),left(p_subject,300),v_existing.id,'resposta_adicionada',now());
+    return jsonb_build_object('accepted',true,'reply',true,'ticket_id',v_existing.id,'protocol',v_existing.protocol,'siape',v_server.siape);
+  end if;
+  select id into v_lab from public.labs where active and upper(p_subject) like '%'||upper(code)||'%' and code is not null order by length(code) desc limit 1;
+  v_title:=btrim(regexp_replace(p_subject,'^\s*CHAMADO\s*:\s*','', 'i')); if v_title='' then v_title:='Chamado recebido por e-mail'; end if;
+  v_protocol:=public.next_protocol(v_lab);
+  insert into public.tickets(protocol,server_id,lab_id,title,description,source) values(v_protocol,v_server.id,v_lab,left(v_title,100),left(btrim(p_body),2000),'Email') returning id into v_ticket;
+  insert into public.email_inbox_log values(p_message_id,lower(p_sender),left(p_subject,300),v_ticket,'criado',now());
+  return jsonb_build_object('accepted',true,'reply',false,'ticket_id',v_ticket,'protocol',v_protocol,'siape',v_server.siape);
 end $$;
-grant execute on function public.apps_script_report_metrics(text,text,integer,integer) to anon;
 
-create or replace function public.maintenance_metrics() returns jsonb
-language plpgsql security definer set search_path=public as $$
-declare m public.integration_runtime_metrics;
+-- -----------------------------------------------------------------------------
+-- migrations/20260813_ticket_archiving.sql
+-- -----------------------------------------------------------------------------
+alter table public.tickets add column if not exists archived_at timestamptz;
+create index if not exists tickets_active_queue_idx on public.tickets(created_at desc) where archived_at is null;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260813_ticket_deletion_audit.sql
+-- -----------------------------------------------------------------------------
+alter table public.tickets add column if not exists deleted_at timestamptz;
+alter table public.tickets add column if not exists deleted_by uuid references public.profiles(id);
+alter table public.tickets add column if not exists deletion_reason text;
+
+create or replace function public.soft_delete_ticket(p_ticket uuid,p_reason text)
+returns void language plpgsql security definer set search_path=public as $$
 begin
-  if public.current_role() not in ('tecnico','supervisor') then raise exception 'Acesso negado'; end if;
-  select * into m from public.integration_runtime_metrics where id=true;
-  return jsonb_build_object(
-    'database_bytes',pg_database_size(current_database()),
-    'attachment_bytes',coalesce((select sum(size_bytes) from public.attachments),0),
-    'attachment_count',(select count(*) from public.attachments),
-    'ticket_count',(select count(*) from public.tickets),
-    'outbox_pending',(select count(*) from public.email_outbox where status in ('pending','processing')),
-    'outbox_failed',(select count(*) from public.email_outbox where status='failed'),
-    'sent_today',m.sent_today,'sent_month',m.sent_month,'email_quota_remaining',m.email_quota_remaining,
-    'inbox_runs_today',m.inbox_runs_today,'outbox_runs_today',m.outbox_runs_today,
-    'last_inbox_run',m.last_inbox_run,'last_outbox_run',m.last_outbox_run,'updated_at',m.updated_at
-  );
+  if public.current_role()<>'tecnico' then raise exception 'Sem permissão'; end if;
+  if length(btrim(coalesce(p_reason,'')))<5 then raise exception 'Informe uma justificativa para a exclusão'; end if;
+  update public.tickets set deleted_at=now(),deleted_by=auth.uid(),deletion_reason=left(btrim(p_reason),500),updated_at=now()
+  where id=p_ticket and deleted_at is null;
 end $$;
-grant execute on function public.maintenance_metrics() to authenticated;
+grant execute on function public.soft_delete_ticket(uuid,text) to authenticated;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260813_technician_opened_email.sql
+-- -----------------------------------------------------------------------------
+-- Diferencia o e-mail de chamado aberto pelo servidor daquele criado pela equipe técnica.
+alter table public.email_outbox drop constraint if exists email_outbox_event_type_check;
+alter table public.email_outbox add constraint email_outbox_event_type_check
+  check (event_type in ('recebido','aberto_pelo_tecnico','em_atendimento','atualizacao','concluido'));
+
+create or replace function public.queue_ticket_email() returns trigger
+language plpgsql security definer set search_path=public as $$
+declare v_email text; v_event text;
+begin
+  v_email:=public.ticket_email(new);
+  if v_email is null then return new; end if;
+  if tg_op='INSERT' then
+    v_event:=case when new.source='Tecnico' then 'aberto_pelo_tecnico' else 'recebido' end;
+  elsif new.status is distinct from old.status and new.status='Em atendimento' then v_event:='em_atendimento';
+  elsif new.status is distinct from old.status and new.status='Concluído' then v_event:='concluido';
+  else return new;
+  end if;
+  insert into public.email_outbox(ticket_id,recipient,event_type,payload)
+  values(new.id,v_email,v_event,public.ticket_email_payload(new));
+  return new;
+end $$;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260813_server_reply_notification.sql
+-- -----------------------------------------------------------------------------
+alter table public.tickets add column if not exists server_reply_pending boolean not null default false;
+alter table public.tickets add column if not exists last_server_reply_at timestamptz;
+
+create or replace function public.mark_server_reply_read(p_ticket uuid)
+returns void language plpgsql security definer set search_path=public as $$
+begin
+  if public.current_role()<>'tecnico' then raise exception 'Acesso negado'; end if;
+  update public.tickets set server_reply_pending=false where id=p_ticket;
+end $$;
+grant execute on function public.mark_server_reply_read(uuid) to authenticated;
+
+create or replace function public.notify_server_reply() returns trigger
+language plpgsql security definer set search_path=public as $$
+begin
+  if new.kind='resposta_servidor' then
+    update public.tickets set server_reply_pending=true,last_server_reply_at=now(),updated_at=now() where id=new.ticket_id;
+  end if;
+  return new;
+end $$;
+drop trigger if exists notify_server_reply on public.ticket_updates;
+create trigger notify_server_reply after insert on public.ticket_updates
+for each row execute function public.notify_server_reply();
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260813_public_ticket_timeline.sql
+-- -----------------------------------------------------------------------------
+drop function if exists public.my_tickets(text);
+create function public.my_tickets(p_siape text)
+returns table(protocol text,title text,category text,lab text,status public.ticket_status,technician text,resolution text,created_at timestamptz,updated_at timestamptz,timeline jsonb)
+language sql security definer set search_path=public as $$
+ select t.protocol,t.title,c.name,l.name,t.status,
+   case when t.status<>'Recebido' then coalesce(
+     (select string_agg(p.full_name, ', ' order by p.full_name) from public.ticket_assignees ta join public.profiles p on p.id=ta.profile_id where ta.ticket_id=t.id),
+     'Toda a equipe') end,
+   t.resolution,t.created_at,t.updated_at,
+   jsonb_build_array(jsonb_build_object('type','abertura','label','Chamado aberto','at',t.created_at))
+   || coalesce((select jsonb_agg(jsonb_build_object(
+       'type',u.kind,
+       'label',case u.kind when 'status' then 'Atendimento iniciado' when 'atualizacao' then 'Atualização enviada pela equipe' when 'resposta_servidor' then 'Resposta recebida pela equipe' when 'fechamento' then 'Atendimento concluído' else 'Andamento registrado' end,
+       'at',u.created_at) order by u.created_at)
+     from public.ticket_updates u where u.ticket_id=t.id),'[]'::jsonb)
+ from public.tickets t left join public.servers s on s.id=t.server_id
+ left join public.categories c on c.id=t.category_id left join public.labs l on l.id=t.lab_id
+ where coalesce(s.siape,t.guest_siape)=p_siape order by t.created_at desc limit 100
+$$;
+grant execute on function public.my_tickets(text) to anon,authenticated;
 
 -- -----------------------------------------------------------------------------
 -- migrations/20260813_production_stabilization.sql
@@ -719,173 +758,63 @@ $$;
 grant execute on function public.my_tickets(text) to anon,authenticated;
 
 -- -----------------------------------------------------------------------------
--- migrations/20260813_public_ticket_timeline.sql
+-- migrations/20260813_maintenance_metrics.sql
 -- -----------------------------------------------------------------------------
-drop function if exists public.my_tickets(text);
-create function public.my_tickets(p_siape text)
-returns table(protocol text,title text,category text,lab text,status public.ticket_status,technician text,resolution text,created_at timestamptz,updated_at timestamptz,timeline jsonb)
-language sql security definer set search_path=public as $$
- select t.protocol,t.title,c.name,l.name,t.status,
-   case when t.status<>'Recebido' then coalesce(
-     (select string_agg(p.full_name, ', ' order by p.full_name) from public.ticket_assignees ta join public.profiles p on p.id=ta.profile_id where ta.ticket_id=t.id),
-     'Toda a equipe') end,
-   t.resolution,t.created_at,t.updated_at,
-   jsonb_build_array(jsonb_build_object('type','abertura','label','Chamado aberto','at',t.created_at))
-   || coalesce((select jsonb_agg(jsonb_build_object(
-       'type',u.kind,
-       'label',case u.kind when 'status' then 'Atendimento iniciado' when 'atualizacao' then 'Atualização enviada pela equipe' when 'resposta_servidor' then 'Resposta recebida pela equipe' when 'fechamento' then 'Atendimento concluído' else 'Andamento registrado' end,
-       'at',u.created_at) order by u.created_at)
-     from public.ticket_updates u where u.ticket_id=t.id),'[]'::jsonb)
- from public.tickets t left join public.servers s on s.id=t.server_id
- left join public.categories c on c.id=t.category_id left join public.labs l on l.id=t.lab_id
- where coalesce(s.siape,t.guest_siape)=p_siape order by t.created_at desc limit 100
-$$;
-grant execute on function public.my_tickets(text) to anon,authenticated;
+create table if not exists public.integration_runtime_metrics (
+  id boolean primary key default true check(id),
+  email_quota_remaining integer,
+  sent_today integer not null default 0,
+  sent_month integer not null default 0,
+  inbox_runs_today integer not null default 0,
+  outbox_runs_today integer not null default 0,
+  metric_day date not null default current_date,
+  metric_month date not null default date_trunc('month',current_date)::date,
+  last_inbox_run timestamptz,
+  last_outbox_run timestamptz,
+  updated_at timestamptz not null default now()
+);
+alter table public.integration_runtime_metrics enable row level security;
+drop policy if exists integration_metrics_read on public.integration_runtime_metrics;
+create policy integration_metrics_read on public.integration_runtime_metrics for select to authenticated
+using(public.current_role() in ('tecnico','supervisor'));
+insert into public.integration_runtime_metrics(id) values(true) on conflict do nothing;
 
--- -----------------------------------------------------------------------------
--- migrations/20260813_server_reply_notification.sql
--- -----------------------------------------------------------------------------
-alter table public.tickets add column if not exists server_reply_pending boolean not null default false;
-alter table public.tickets add column if not exists last_server_reply_at timestamptz;
-
-create or replace function public.mark_server_reply_read(p_ticket uuid)
+create or replace function public.apps_script_report_metrics(p_secret text,p_kind text,p_sent integer,p_remaining integer)
 returns void language plpgsql security definer set search_path=public as $$
 begin
-  if public.current_role()<>'tecnico' then raise exception 'Acesso negado'; end if;
-  update public.tickets set server_reply_pending=false where id=p_ticket;
+  if not public.integration_secret_valid(p_secret) then raise exception 'Credencial inválida'; end if;
+  update public.integration_runtime_metrics set
+    sent_today=case when metric_day=current_date then sent_today+greatest(p_sent,0) else greatest(p_sent,0) end,
+    sent_month=case when metric_month=date_trunc('month',current_date)::date then sent_month+greatest(p_sent,0) else greatest(p_sent,0) end,
+    inbox_runs_today=case when metric_day=current_date then inbox_runs_today+(p_kind='inbox')::int else (p_kind='inbox')::int end,
+    outbox_runs_today=case when metric_day=current_date then outbox_runs_today+(p_kind='outbox')::int else (p_kind='outbox')::int end,
+    metric_day=current_date,metric_month=date_trunc('month',current_date)::date,
+    email_quota_remaining=p_remaining,
+    last_inbox_run=case when p_kind='inbox' then now() else last_inbox_run end,
+    last_outbox_run=case when p_kind='outbox' then now() else last_outbox_run end,updated_at=now()
+  where id=true;
 end $$;
-grant execute on function public.mark_server_reply_read(uuid) to authenticated;
+grant execute on function public.apps_script_report_metrics(text,text,integer,integer) to anon;
 
-create or replace function public.notify_server_reply() returns trigger
+create or replace function public.maintenance_metrics() returns jsonb
 language plpgsql security definer set search_path=public as $$
+declare m public.integration_runtime_metrics;
 begin
-  if new.kind='resposta_servidor' then
-    update public.tickets set server_reply_pending=true,last_server_reply_at=now(),updated_at=now() where id=new.ticket_id;
-  end if;
-  return new;
+  if public.current_role() not in ('tecnico','supervisor') then raise exception 'Acesso negado'; end if;
+  select * into m from public.integration_runtime_metrics where id=true;
+  return jsonb_build_object(
+    'database_bytes',pg_database_size(current_database()),
+    'attachment_bytes',coalesce((select sum(size_bytes) from public.attachments),0),
+    'attachment_count',(select count(*) from public.attachments),
+    'ticket_count',(select count(*) from public.tickets),
+    'outbox_pending',(select count(*) from public.email_outbox where status in ('pending','processing')),
+    'outbox_failed',(select count(*) from public.email_outbox where status='failed'),
+    'sent_today',m.sent_today,'sent_month',m.sent_month,'email_quota_remaining',m.email_quota_remaining,
+    'inbox_runs_today',m.inbox_runs_today,'outbox_runs_today',m.outbox_runs_today,
+    'last_inbox_run',m.last_inbox_run,'last_outbox_run',m.last_outbox_run,'updated_at',m.updated_at
+  );
 end $$;
-drop trigger if exists notify_server_reply on public.ticket_updates;
-create trigger notify_server_reply after insert on public.ticket_updates
-for each row execute function public.notify_server_reply();
-
--- -----------------------------------------------------------------------------
--- migrations/20260813_technician_opened_email.sql
--- -----------------------------------------------------------------------------
--- Diferencia o e-mail de chamado aberto pelo servidor daquele criado pela equipe técnica.
-alter table public.email_outbox drop constraint if exists email_outbox_event_type_check;
-alter table public.email_outbox add constraint email_outbox_event_type_check
-  check (event_type in ('recebido','aberto_pelo_tecnico','em_atendimento','atualizacao','concluido'));
-
-create or replace function public.queue_ticket_email() returns trigger
-language plpgsql security definer set search_path=public as $$
-declare v_email text; v_event text;
-begin
-  v_email:=public.ticket_email(new);
-  if v_email is null then return new; end if;
-  if tg_op='INSERT' then
-    v_event:=case when new.source='Tecnico' then 'aberto_pelo_tecnico' else 'recebido' end;
-  elsif new.status is distinct from old.status and new.status='Em atendimento' then v_event:='em_atendimento';
-  elsif new.status is distinct from old.status and new.status='Concluído' then v_event:='concluido';
-  else return new;
-  end if;
-  insert into public.email_outbox(ticket_id,recipient,event_type,payload)
-  values(new.id,v_email,v_event,public.ticket_email_payload(new));
-  return new;
-end $$;
-
--- -----------------------------------------------------------------------------
--- migrations/20260813_ticket_archiving.sql
--- -----------------------------------------------------------------------------
-alter table public.tickets add column if not exists archived_at timestamptz;
-create index if not exists tickets_active_queue_idx on public.tickets(created_at desc) where archived_at is null;
-
--- -----------------------------------------------------------------------------
--- migrations/20260813_ticket_deletion_audit.sql
--- -----------------------------------------------------------------------------
-alter table public.tickets add column if not exists deleted_at timestamptz;
-alter table public.tickets add column if not exists deleted_by uuid references public.profiles(id);
-alter table public.tickets add column if not exists deletion_reason text;
-
-create or replace function public.soft_delete_ticket(p_ticket uuid,p_reason text)
-returns void language plpgsql security definer set search_path=public as $$
-begin
-  if public.current_role()<>'tecnico' then raise exception 'Sem permissão'; end if;
-  if length(btrim(coalesce(p_reason,'')))<5 then raise exception 'Informe uma justificativa para a exclusão'; end if;
-  update public.tickets set deleted_at=now(),deleted_by=auth.uid(),deletion_reason=left(btrim(p_reason),500),updated_at=now()
-  where id=p_ticket and deleted_at is null;
-end $$;
-grant execute on function public.soft_delete_ticket(uuid,text) to authenticated;
-
--- -----------------------------------------------------------------------------
--- migrations/20260814_drop_reservation_block_constraint.sql
--- -----------------------------------------------------------------------------
--- A duração real pode incluir intervalos entre aulas; a validação ocorre em
--- validate_reservation_slot, com mínimo de 45 minutos e máximo de 6 horas.
-do $$
-declare constraint_name text;
-begin
-  for constraint_name in
-    select con.conname
-    from pg_constraint con
-    join pg_class rel on rel.oid=con.conrelid
-    join pg_namespace ns on ns.oid=rel.relnamespace
-    where ns.nspname='public'
-      and rel.relname='reservations'
-      and con.contype='c'
-      and pg_get_constraintdef(con.oid) like '%2700%'
-  loop
-    execute format('alter table public.reservations drop constraint %I',constraint_name);
-  end loop;
-end $$;
-
--- -----------------------------------------------------------------------------
--- migrations/20260814_fix_confirm_reservation_status.sql
--- -----------------------------------------------------------------------------
-create or replace function public.confirm_reservation(p_token uuid)
-returns table(protocol text,status text,confirmed_at timestamptz)
-language plpgsql security definer set search_path=public as $$
-declare
-  r public.reservations;
-  s public.servers;
-begin
-  select reservation.* into r
-  from public.reservations as reservation
-  where reservation.confirmation_token=p_token
-  order by reservation.starts_at
-  limit 1;
-
-  if r.id is null then
-    raise exception 'Link inválido ou reserva indisponível.';
-  end if;
-
-  update public.reservations as reservation
-  set status='Aguardando autorização',
-      confirmed_at=coalesce(reservation.confirmed_at,now()),
-      updated_at=now()
-  where reservation.recurrence_group=r.recurrence_group
-    and reservation.status in ('Aguardando confirmação','Aguardando autorização');
-
-  select reservation.* into r
-  from public.reservations as reservation
-  where reservation.id=r.id;
-
-  select server.* into s
-  from public.servers as server
-  where server.id=r.server_id;
-
-  if not exists(
-    select 1 from public.email_outbox as outbox
-    where outbox.reservation_id=r.id
-      and outbox.event_type='reserva_confirmada'
-  ) then
-    insert into public.email_outbox(reservation_id,recipient,event_type,payload)
-    values(r.id,lower(s.email),'reserva_confirmada',public.reservation_payload(r));
-  end if;
-
-  return query select r.protocol,r.status,r.confirmed_at;
-end $$;
-
-grant execute on function public.confirm_reservation(uuid) to anon,authenticated;
+grant execute on function public.maintenance_metrics() to authenticated;
 
 -- -----------------------------------------------------------------------------
 -- migrations/20260814_lab_computer_count.sql
@@ -898,142 +827,6 @@ alter table public.labs
 
 alter table public.labs
   add constraint labs_computer_count_check check (computer_count >= 0);
-
--- -----------------------------------------------------------------------------
--- migrations/20260814_public_reservation_schedule.sql
--- -----------------------------------------------------------------------------
-create or replace function public.public_reservation_schedule(p_lab uuid,p_from date,p_to date)
-returns table(id uuid,subject text,server_name text,starts_at timestamptz,ends_at timestamptz,status text)
-language plpgsql stable security definer set search_path=public as $$
-begin
-  if p_to<p_from or p_to>p_from+42 then raise exception 'Período de consulta inválido.'; end if;
-  return query
-  select r.id,
-    case when r.status='Autorizada' then r.subject else 'Horário em análise' end,
-    case when r.status='Autorizada' then s.full_name else null end,
-    r.starts_at,r.ends_at,r.status
-  from public.reservations r
-  join public.servers s on s.id=r.server_id
-  where r.lab_id=p_lab
-    and r.status<>'Cancelada'
-    and (r.starts_at at time zone 'America/Cuiaba')::date between p_from and p_to
-  order by r.starts_at;
-end $$;
-
-grant execute on function public.public_reservation_schedule(uuid,date,date) to anon,authenticated;
-
--- -----------------------------------------------------------------------------
--- migrations/20260814_reservation_admin_edit.sql
--- -----------------------------------------------------------------------------
--- Edição administrativa de uma ocorrência ou de toda a série recorrente.
-create or replace function public.staff_edit_reservation(
-  p_id uuid,p_server uuid,p_lab uuid,p_subject text,p_start timestamptz,
-  p_blocks integer,p_notes text default null,p_scope text default 'occurrence'
-)
-returns public.reservations language plpgsql security definer set search_path=public as $$
-declare
-  base public.reservations;
-  item public.reservations;
-  result public.reservations;
-  target_start timestamptz;
-  target_end timestamptz;
-  shift interval;
-  recipient text;
-begin
-  if public.current_role() not in ('tecnico','supervisor') then raise exception 'Acesso negado.'; end if;
-  if p_scope not in ('occurrence','series') then raise exception 'Escopo inválido.'; end if;
-  if p_blocks not between 1 and 8 then raise exception 'Quantidade de blocos inválida.'; end if;
-  if length(btrim(coalesce(p_subject,''))) not between 2 and 160 then raise exception 'Informe a disciplina ou atividade.'; end if;
-  select * into base from public.reservations where id=p_id for update;
-  if base.id is null then raise exception 'Reserva não encontrada.'; end if;
-  shift:=p_start-base.starts_at;
-
-  for item in
-    select * from public.reservations
-    where id=p_id or (p_scope='series' and recurrence_group=base.recurrence_group)
-    order by starts_at for update
-  loop
-    target_start:=case when p_scope='series' then item.starts_at+shift else p_start end;
-    target_end:=target_start+(p_blocks*interval '45 minutes');
-    perform public.assert_reservation_available(p_lab,target_start,target_end,item.id);
-    update public.reservations set server_id=p_server,lab_id=p_lab,subject=btrim(p_subject),notes=nullif(btrim(coalesce(p_notes,'')),''),starts_at=target_start,ends_at=target_end,updated_at=now() where id=item.id;
-  end loop;
-
-  select * into result from public.reservations where id=p_id;
-  select lower(email) into recipient from public.servers where id=p_server and active;
-  if recipient is null then raise exception 'Servidor não encontrado ou inativo.'; end if;
-  insert into public.email_outbox(reservation_id,recipient,event_type,payload)
-  values(result.id,recipient,'reserva_alterada',public.reservation_payload(result));
-  return result;
-end $$;
-
-grant execute on function public.staff_edit_reservation(uuid,uuid,uuid,text,timestamptz,integer,text,text) to authenticated;
-
--- -----------------------------------------------------------------------------
--- migrations/20260814_reservation_time_ranges.sql
--- -----------------------------------------------------------------------------
--- Permite informar inicio e fim reais, incluindo intervalos entre blocos de aula.
-create or replace function public.validate_reservation_slot(p_start timestamptz,p_end timestamptz)
-returns void language plpgsql stable set search_path=public as $$
-declare
-  s timestamp:=p_start at time zone 'America/Cuiaba';
-  e timestamp:=p_end at time zone 'America/Cuiaba';
-  duration_seconds integer:=extract(epoch from (p_end-p_start))::integer;
-begin
-  if extract(isodow from s) not between 1 and 6 or s::date<>e::date then
-    raise exception 'Reservas são permitidas de segunda a sábado.';
-  end if;
-  if duration_seconds<2700 or duration_seconds>21600 then
-    raise exception 'A reserva deve ter entre 45 minutos e 6 horas.';
-  end if;
-  if extract(minute from s)::integer%5<>0 or extract(minute from e)::integer%5<>0 then
-    raise exception 'Informe início e fim em intervalos de 5 minutos.';
-  end if;
-  if not ((s::time>='07:00' and e::time<='12:35') or (s::time>='13:00' and e::time<='18:35') or (s::time>='18:45' and e::time<='22:50')) then
-    raise exception 'Horário fora dos períodos de utilização dos laboratórios.';
-  end if;
-end $$;
-
-create or replace function public.create_public_reservation_range(
-  p_siape text,p_lab uuid,p_subject text,p_start timestamptz,p_end timestamptz,
-  p_notes text default null,p_recurrence text default 'none',p_until date default null
-)
-returns table(id uuid,protocol text,status text) language plpgsql security definer set search_path=public as $$
-declare
-  s public.servers; r public.reservations; first_r public.reservations;
-  occurrence timestamptz:=p_start; finish timestamptz;
-  requested_duration interval:=p_end-p_start;
-  final_date date:=coalesce(p_until,(p_start at time zone 'America/Cuiaba')::date);
-  group_id uuid:=gen_random_uuid(); count_items integer:=0;
-begin
-  select * into s from public.servers where siape=btrim(p_siape) and active limit 1;
-  if s.id is null then raise exception 'Servidor não localizado ou inativo.'; end if;
-  perform public.validate_reservation_slot(p_start,p_end);
-  if p_recurrence not in ('none','weekly') then raise exception 'Repetição inválida.'; end if;
-  if final_date<(p_start at time zone 'America/Cuiaba')::date or final_date>(p_start at time zone 'America/Cuiaba')::date+interval '180 days' then
-    raise exception 'A data final deve estar dentro dos próximos 180 dias.';
-  end if;
-  loop
-    if extract(isodow from occurrence at time zone 'America/Cuiaba') between 1 and 6 then
-      finish:=occurrence+requested_duration;
-      perform public.assert_reservation_available(p_lab,occurrence,finish,null);
-      insert into public.reservations(protocol,server_id,lab_id,subject,notes,starts_at,ends_at,recurrence_group,recurrence)
-      values(public.next_reservation_protocol(),s.id,p_lab,btrim(p_subject),nullif(btrim(p_notes),''),occurrence,finish,group_id,p_recurrence)
-      returning * into r;
-      if count_items=0 then first_r:=r; end if;
-      count_items:=count_items+1;
-    end if;
-    exit when p_recurrence='none' or (occurrence at time zone 'America/Cuiaba')::date>=final_date;
-    occurrence:=occurrence+interval '7 days';
-    exit when (occurrence at time zone 'America/Cuiaba')::date>final_date;
-  end loop;
-  if count_items=0 then raise exception 'A série não possui nenhuma data válida.'; end if;
-  insert into public.email_outbox(reservation_id,recipient,event_type,payload)
-  values(first_r.id,lower(s.email),'reserva_confirmar',public.reservation_payload(first_r)||jsonb_build_object('series_count',count_items,'series_until',final_date));
-  return query select first_r.id,first_r.protocol,first_r.status;
-end $$;
-
-grant execute on function public.create_public_reservation_range(text,uuid,text,timestamptz,timestamptz,text,text,date) to anon,authenticated;
 
 -- -----------------------------------------------------------------------------
 -- migrations/20260814_reservations.sql
@@ -1239,6 +1032,213 @@ grant execute on function public.staff_update_reservation(uuid,timestamptz,uuid,
 do $$ begin alter publication supabase_realtime add table public.reservations; exception when duplicate_object then null; end $$;
 
 -- -----------------------------------------------------------------------------
+-- migrations/20260814_drop_reservation_block_constraint.sql
+-- -----------------------------------------------------------------------------
+-- A duração real pode incluir intervalos entre aulas; a validação ocorre em
+-- validate_reservation_slot, com mínimo de 45 minutos e máximo de 6 horas.
+do $$
+declare constraint_name text;
+begin
+  for constraint_name in
+    select con.conname
+    from pg_constraint con
+    join pg_class rel on rel.oid=con.conrelid
+    join pg_namespace ns on ns.oid=rel.relnamespace
+    where ns.nspname='public'
+      and rel.relname='reservations'
+      and con.contype='c'
+      and pg_get_constraintdef(con.oid) like '%2700%'
+  loop
+    execute format('alter table public.reservations drop constraint %I',constraint_name);
+  end loop;
+end $$;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260814_fix_confirm_reservation_status.sql
+-- -----------------------------------------------------------------------------
+create or replace function public.confirm_reservation(p_token uuid)
+returns table(protocol text,status text,confirmed_at timestamptz)
+language plpgsql security definer set search_path=public as $$
+declare
+  r public.reservations;
+  s public.servers;
+begin
+  select reservation.* into r
+  from public.reservations as reservation
+  where reservation.confirmation_token=p_token
+  order by reservation.starts_at
+  limit 1;
+
+  if r.id is null then
+    raise exception 'Link inválido ou reserva indisponível.';
+  end if;
+
+  update public.reservations as reservation
+  set status='Aguardando autorização',
+      confirmed_at=coalesce(reservation.confirmed_at,now()),
+      updated_at=now()
+  where reservation.recurrence_group=r.recurrence_group
+    and reservation.status in ('Aguardando confirmação','Aguardando autorização');
+
+  select reservation.* into r
+  from public.reservations as reservation
+  where reservation.id=r.id;
+
+  select server.* into s
+  from public.servers as server
+  where server.id=r.server_id;
+
+  if not exists(
+    select 1 from public.email_outbox as outbox
+    where outbox.reservation_id=r.id
+      and outbox.event_type='reserva_confirmada'
+  ) then
+    insert into public.email_outbox(reservation_id,recipient,event_type,payload)
+    values(r.id,lower(s.email),'reserva_confirmada',public.reservation_payload(r));
+  end if;
+
+  return query select r.protocol,r.status,r.confirmed_at;
+end $$;
+
+grant execute on function public.confirm_reservation(uuid) to anon,authenticated;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260814_public_reservation_schedule.sql
+-- -----------------------------------------------------------------------------
+create or replace function public.public_reservation_schedule(p_lab uuid,p_from date,p_to date)
+returns table(id uuid,subject text,server_name text,starts_at timestamptz,ends_at timestamptz,status text)
+language plpgsql stable security definer set search_path=public as $$
+begin
+  if p_to<p_from or p_to>p_from+42 then raise exception 'Período de consulta inválido.'; end if;
+  return query
+  select r.id,
+    case when r.status='Autorizada' then r.subject else 'Horário em análise' end,
+    case when r.status='Autorizada' then s.full_name else null end,
+    r.starts_at,r.ends_at,r.status
+  from public.reservations r
+  join public.servers s on s.id=r.server_id
+  where r.lab_id=p_lab
+    and r.status<>'Cancelada'
+    and (r.starts_at at time zone 'America/Cuiaba')::date between p_from and p_to
+  order by r.starts_at;
+end $$;
+
+grant execute on function public.public_reservation_schedule(uuid,date,date) to anon,authenticated;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260814_reservation_admin_edit.sql
+-- -----------------------------------------------------------------------------
+-- Edição administrativa de uma ocorrência ou de toda a série recorrente.
+create or replace function public.staff_edit_reservation(
+  p_id uuid,p_server uuid,p_lab uuid,p_subject text,p_start timestamptz,
+  p_blocks integer,p_notes text default null,p_scope text default 'occurrence'
+)
+returns public.reservations language plpgsql security definer set search_path=public as $$
+declare
+  base public.reservations;
+  item public.reservations;
+  result public.reservations;
+  target_start timestamptz;
+  target_end timestamptz;
+  shift interval;
+  recipient text;
+begin
+  if public.current_role() not in ('tecnico','supervisor') then raise exception 'Acesso negado.'; end if;
+  if p_scope not in ('occurrence','series') then raise exception 'Escopo inválido.'; end if;
+  if p_blocks not between 1 and 8 then raise exception 'Quantidade de blocos inválida.'; end if;
+  if length(btrim(coalesce(p_subject,''))) not between 2 and 160 then raise exception 'Informe a disciplina ou atividade.'; end if;
+  select * into base from public.reservations where id=p_id for update;
+  if base.id is null then raise exception 'Reserva não encontrada.'; end if;
+  shift:=p_start-base.starts_at;
+
+  for item in
+    select * from public.reservations
+    where id=p_id or (p_scope='series' and recurrence_group=base.recurrence_group)
+    order by starts_at for update
+  loop
+    target_start:=case when p_scope='series' then item.starts_at+shift else p_start end;
+    target_end:=target_start+(p_blocks*interval '45 minutes');
+    perform public.assert_reservation_available(p_lab,target_start,target_end,item.id);
+    update public.reservations set server_id=p_server,lab_id=p_lab,subject=btrim(p_subject),notes=nullif(btrim(coalesce(p_notes,'')),''),starts_at=target_start,ends_at=target_end,updated_at=now() where id=item.id;
+  end loop;
+
+  select * into result from public.reservations where id=p_id;
+  select lower(email) into recipient from public.servers where id=p_server and active;
+  if recipient is null then raise exception 'Servidor não encontrado ou inativo.'; end if;
+  insert into public.email_outbox(reservation_id,recipient,event_type,payload)
+  values(result.id,recipient,'reserva_alterada',public.reservation_payload(result));
+  return result;
+end $$;
+
+grant execute on function public.staff_edit_reservation(uuid,uuid,uuid,text,timestamptz,integer,text,text) to authenticated;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260814_reservation_time_ranges.sql
+-- -----------------------------------------------------------------------------
+-- Permite informar inicio e fim reais, incluindo intervalos entre blocos de aula.
+create or replace function public.validate_reservation_slot(p_start timestamptz,p_end timestamptz)
+returns void language plpgsql stable set search_path=public as $$
+declare
+  s timestamp:=p_start at time zone 'America/Cuiaba';
+  e timestamp:=p_end at time zone 'America/Cuiaba';
+  duration_seconds integer:=extract(epoch from (p_end-p_start))::integer;
+begin
+  if extract(isodow from s) not between 1 and 6 or s::date<>e::date then
+    raise exception 'Reservas são permitidas de segunda a sábado.';
+  end if;
+  if duration_seconds<2700 or duration_seconds>21600 then
+    raise exception 'A reserva deve ter entre 45 minutos e 6 horas.';
+  end if;
+  if extract(minute from s)::integer%5<>0 or extract(minute from e)::integer%5<>0 then
+    raise exception 'Informe início e fim em intervalos de 5 minutos.';
+  end if;
+  if not ((s::time>='07:00' and e::time<='12:35') or (s::time>='13:00' and e::time<='18:35') or (s::time>='18:45' and e::time<='22:50')) then
+    raise exception 'Horário fora dos períodos de utilização dos laboratórios.';
+  end if;
+end $$;
+
+create or replace function public.create_public_reservation_range(
+  p_siape text,p_lab uuid,p_subject text,p_start timestamptz,p_end timestamptz,
+  p_notes text default null,p_recurrence text default 'none',p_until date default null
+)
+returns table(id uuid,protocol text,status text) language plpgsql security definer set search_path=public as $$
+declare
+  s public.servers; r public.reservations; first_r public.reservations;
+  occurrence timestamptz:=p_start; finish timestamptz;
+  requested_duration interval:=p_end-p_start;
+  final_date date:=coalesce(p_until,(p_start at time zone 'America/Cuiaba')::date);
+  group_id uuid:=gen_random_uuid(); count_items integer:=0;
+begin
+  select * into s from public.servers where siape=btrim(p_siape) and active limit 1;
+  if s.id is null then raise exception 'Servidor não localizado ou inativo.'; end if;
+  perform public.validate_reservation_slot(p_start,p_end);
+  if p_recurrence not in ('none','weekly') then raise exception 'Repetição inválida.'; end if;
+  if final_date<(p_start at time zone 'America/Cuiaba')::date or final_date>(p_start at time zone 'America/Cuiaba')::date+interval '180 days' then
+    raise exception 'A data final deve estar dentro dos próximos 180 dias.';
+  end if;
+  loop
+    if extract(isodow from occurrence at time zone 'America/Cuiaba') between 1 and 6 then
+      finish:=occurrence+requested_duration;
+      perform public.assert_reservation_available(p_lab,occurrence,finish,null);
+      insert into public.reservations(protocol,server_id,lab_id,subject,notes,starts_at,ends_at,recurrence_group,recurrence)
+      values(public.next_reservation_protocol(),s.id,p_lab,btrim(p_subject),nullif(btrim(p_notes),''),occurrence,finish,group_id,p_recurrence)
+      returning * into r;
+      if count_items=0 then first_r:=r; end if;
+      count_items:=count_items+1;
+    end if;
+    exit when p_recurrence='none' or (occurrence at time zone 'America/Cuiaba')::date>=final_date;
+    occurrence:=occurrence+interval '7 days';
+    exit when (occurrence at time zone 'America/Cuiaba')::date>final_date;
+  end loop;
+  if count_items=0 then raise exception 'A série não possui nenhuma data válida.'; end if;
+  insert into public.email_outbox(reservation_id,recipient,event_type,payload)
+  values(first_r.id,lower(s.email),'reserva_confirmar',public.reservation_payload(first_r)||jsonb_build_object('series_count',count_items,'series_until',final_date));
+  return query select first_r.id,first_r.protocol,first_r.status;
+end $$;
+
+grant execute on function public.create_public_reservation_range(text,uuid,text,timestamptz,timestamptz,text,text,date) to anon,authenticated;
+
+-- -----------------------------------------------------------------------------
 -- migrations/20260814_support_feedback_url.sql
 -- -----------------------------------------------------------------------------
 -- Mantém os links de acompanhamento na rota pública exclusiva de suporte.
@@ -1278,451 +1278,6 @@ returns jsonb language sql stable security definer set search_path=public as $$
   left join public.servers s on s.id=t.server_id
   left join public.labs l on l.id=t.lab_id
   left join public.categories c on c.id=t.category_id
-$$;
-
--- -----------------------------------------------------------------------------
--- migrations/20260818_chat_feedback_email.sql
--- -----------------------------------------------------------------------------
--- Migration: Envio automático de e-mail de feedback e chamado ao finalizar chat ao vivo
--- Garante que todo atendimento de chat finalizado gere o chamado com histórico e link de feedback no e-mail do servidor
-
-create or replace function public.create_ticket_from_chat(
-  p_session_id uuid,
-  p_lab uuid default null,
-  p_category uuid default null,
-  p_title text default null,
-  p_resolution text default null,
-  p_status text default 'Concluído'
-)
-returns jsonb
-language plpgsql security definer set search_path = public, auth as $$
-declare
-  v_session record;
-  v_tech_id uuid;
-  v_protocol text;
-  v_new_ticket_id uuid;
-  v_chat_transcript text := '';
-  v_msg record;
-  v_title text;
-  v_status text := coalesce(nullif(trim(p_status), ''), 'Concluído');
-begin
-  select cs.*, s.id as server_id, s.full_name as server_name, s.siape as server_siape, s.email as server_email
-  into v_session
-  from public.chat_sessions cs
-  join public.servers s on s.id = cs.server_id
-  where cs.id = p_session_id;
-
-  if v_session.id is null then
-    raise exception 'Sessão de chat não encontrada.';
-  end if;
-
-  -- Se já tiver chamado vinculado, apenas retorna os dados existentes
-  if v_session.ticket_id is not null then
-    select protocol into v_protocol from public.tickets where id = v_session.ticket_id;
-    return jsonb_build_object(
-      'ticket_id', v_session.ticket_id,
-      'protocol', v_protocol,
-      'status', v_status
-    );
-  end if;
-
-  -- Identifica o técnico responsável
-  v_tech_id := auth.uid();
-  if v_tech_id is null then
-    v_tech_id := v_session.technician_id;
-  end if;
-
-  -- Monta a transcrição do diálogo formatada
-  for v_msg in
-    select cm.sender_name, cm.sender_type, cm.message, cm.created_at
-    from public.chat_messages cm
-    where cm.session_id = p_session_id
-    order by cm.created_at asc
-  loop
-    v_chat_transcript := v_chat_transcript || '[' || to_char(v_msg.created_at at time zone 'America/Cuiaba', 'DD/MM/YYYY HH24:MI') || '] ' || v_msg.sender_name || ': ' || v_msg.message || E'\n';
-  end loop;
-
-  -- Gera número de protocolo
-  v_protocol := public.next_protocol(p_lab);
-  v_title := coalesce(nullif(trim(p_title), ''), 'Atendimento via Chat: ' || coalesce(v_session.subject, 'Dúvida/Suporte'));
-
-  -- Cria o chamado oficial com feedback_token
-  insert into public.tickets(
-    protocol,
-    server_id,
-    lab_id,
-    category_id,
-    title,
-    description,
-    status,
-    source,
-    assigned_to,
-    resolution,
-    started_at,
-    closed_at,
-    feedback_token
-  )
-  values (
-    v_protocol,
-    v_session.server_id,
-    p_lab,
-    p_category,
-    left(v_title, 100),
-    E'Atendimento realizado via Chat ao Vivo com a equipe de TI.\n\n--- TRANSCRIÇÃO DA CONVERSA ---\n' || v_chat_transcript,
-    v_status,
-    'Chat',
-    v_tech_id,
-    case when v_status = 'Concluído' then coalesce(nullif(trim(p_resolution), ''), 'Atendimento concluído via Chat ao Vivo.') else null end,
-    coalesce(v_session.started_at, now()),
-    case when v_status = 'Concluído' then now() else null end,
-    gen_random_uuid()
-  )
-  returning tickets.id into v_new_ticket_id;
-
-  -- Registra no histórico do chamado
-  insert into public.ticket_updates(ticket_id, author_id, message, kind)
-  values (
-    v_new_ticket_id,
-    v_tech_id,
-    case when v_status = 'Concluído'
-      then 'Chamado gerado e concluído a partir do Chat ao Vivo. Solução registrada: ' || coalesce(nullif(trim(p_resolution), ''), 'Atendimento prestado em tempo real.')
-      else 'Chamado gerado a partir do Chat ao Vivo e mantido em atendimento presencial pela equipe técnica.'
-    end,
-    case when v_status = 'Concluído' then 'fechamento' else 'status' end
-  );
-
-  -- Atualiza e encerra a sessão de chat vinculando ao chamado
-  update public.chat_sessions cs
-  set status = 'closed',
-      ticket_id = v_new_ticket_id,
-      closed_at = now(),
-      closed_by = coalesce(v_tech_id, cs.closed_by),
-      notes = coalesce(nullif(trim(p_resolution), ''), cs.notes)
-  where cs.id = p_session_id;
-
-  -- Notificação no chat para o docente
-  insert into public.chat_messages(session_id, sender_type, sender_id, sender_name, message)
-  values (
-    p_session_id,
-    'system',
-    v_tech_id,
-    'Sistema LabInfo',
-    'Atendimento finalizado! Um e-mail com os detalhes do chamado (' || v_protocol || ') e o link de confirmação foi enviado para ' || v_session.server_email || '.'
-  );
-
-  return jsonb_build_object(
-    'ticket_id', v_new_ticket_id,
-    'protocol', v_protocol,
-    'status', v_status
-  );
-end $$;
-
-grant execute on function public.create_ticket_from_chat(uuid, uuid, uuid, text, text, text) to anon, authenticated;
-
--- Encerrar chat garantindo criação de chamado e e-mail de feedback se for uma conversa ativa
-create or replace function public.close_chat_session(p_session_id uuid, p_notes text default null)
-returns boolean language plpgsql security definer set search_path = public, auth as $$
-declare
-  v_sess record;
-begin
-  select * into v_sess from public.chat_sessions where id = p_session_id;
-  if v_sess.id is null then
-    return false;
-  end if;
-
-  -- Se a sessão estava ativa e ainda não tinha chamado gerado, gera automaticamente o chamado concluído
-  if v_sess.status = 'active' and v_sess.ticket_id is null then
-    perform public.create_ticket_from_chat(
-      p_session_id,
-      null,
-      null,
-      null,
-      coalesce(p_notes, 'Atendimento concluído via Chat ao Vivo.'),
-      'Concluído'
-    );
-    return true;
-  end if;
-
-  update public.chat_sessions cs
-  set status = 'closed',
-      closed_at = now(),
-      closed_by = coalesce(auth.uid(), cs.technician_id),
-      notes = coalesce(p_notes, cs.notes)
-  where cs.id = p_session_id and cs.status in ('waiting', 'active');
-
-  insert into public.chat_messages(session_id, sender_type, sender_name, message)
-  values (p_session_id, 'system', 'Sistema LabInfo', 'Atendimento de chat encerrado.');
-
-  return true;
-end $$;
-
-grant execute on function public.close_chat_session(uuid, text) to anon, authenticated;
-
--- -----------------------------------------------------------------------------
--- migrations/20260818_fix_create_ticket_from_chat_ambiguity.sql
--- -----------------------------------------------------------------------------
--- Migration: Resolução de ambiguidade na função create_ticket_from_chat
--- Elimina sobrecargas duplicadas e estabelece uma assinatura única canônica
-
--- 1. Remove explicitamente todas as versões sobrecarregadas anteriores
-DROP FUNCTION IF EXISTS public.create_ticket_from_chat(uuid, uuid, uuid, text, text, public.ticket_status);
-DROP FUNCTION IF EXISTS public.create_ticket_from_chat(uuid, uuid, uuid, text, text, text);
-DROP FUNCTION IF EXISTS public.create_ticket_from_chat(uuid, uuid, uuid, text, text);
-DROP FUNCTION IF EXISTS public.create_ticket_from_chat(uuid, text, text, text, text, text);
-DROP FUNCTION IF EXISTS public.create_ticket_from_chat(uuid, text, text);
-DROP FUNCTION IF EXISTS public.create_ticket_from_chat(uuid);
-
--- 2. Cria a função canônica com assinatura única
-CREATE OR REPLACE FUNCTION public.create_ticket_from_chat(
-  p_session_id uuid,
-  p_lab uuid default null,
-  p_category uuid default null,
-  p_title text default null,
-  p_resolution text default null,
-  p_status text default 'Concluído'
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, auth AS $$
-DECLARE
-  v_session record;
-  v_tech_id uuid;
-  v_protocol text;
-  v_new_ticket_id uuid;
-  v_chat_transcript text := '';
-  v_msg record;
-  v_title text;
-  v_status_clean text;
-  v_status_enum public.ticket_status;
-BEGIN
-  -- Garante status válido
-  v_status_clean := coalesce(nullif(trim(p_status), ''), 'Concluído');
-  IF v_status_clean NOT IN ('Recebido', 'Em atendimento', 'Concluído') THEN
-    v_status_clean := 'Concluído';
-  END IF;
-  v_status_enum := v_status_clean::public.ticket_status;
-
-  SELECT cs.*, s.id as server_id, s.full_name as server_name, s.siape as server_siape, s.email as server_email
-  INTO v_session
-  FROM public.chat_sessions cs
-  JOIN public.servers s ON s.id = cs.server_id
-  WHERE cs.id = p_session_id;
-
-  IF v_session.id IS NULL THEN
-    RAISE EXCEPTION 'Sessão de chat não encontrada.';
-  END IF;
-
-  -- Se já tiver chamado vinculado, apenas retorna os dados existentes
-  IF v_session.ticket_id IS NOT NULL THEN
-    SELECT protocol INTO v_protocol FROM public.tickets WHERE id = v_session.ticket_id;
-    RETURN jsonb_build_object(
-      'ticket_id', v_session.ticket_id,
-      'protocol', v_protocol,
-      'status', v_status_clean
-    );
-  END IF;
-
-  -- Identifica o técnico responsável
-  v_tech_id := auth.uid();
-  IF v_tech_id IS NULL THEN
-    v_tech_id := v_session.technician_id;
-  END IF;
-
-  -- Monta a transcrição do diálogo formatada
-  FOR v_msg IN
-    SELECT cm.sender_name, cm.sender_type, cm.message, cm.created_at
-    FROM public.chat_messages cm
-    WHERE cm.session_id = p_session_id
-    ORDER BY cm.created_at ASC
-  LOOP
-    v_chat_transcript := v_chat_transcript || '[' || to_char(v_msg.created_at at time zone 'America/Cuiaba', 'DD/MM/YYYY HH24:MI') || '] ' || v_msg.sender_name || ': ' || v_msg.message || E'\n';
-  END LOOP;
-
-  -- Gera número de protocolo
-  v_protocol := public.next_protocol(p_lab);
-  v_title := coalesce(nullif(trim(p_title), ''), 'Atendimento via Chat: ' || coalesce(v_session.subject, 'Dúvida/Suporte'));
-
-  -- Cria o chamado oficial com feedback_token
-  INSERT INTO public.tickets(
-    protocol,
-    server_id,
-    lab_id,
-    category_id,
-    title,
-    description,
-    status,
-    source,
-    assigned_to,
-    resolution,
-    started_at,
-    closed_at,
-    feedback_token
-  )
-  VALUES (
-    v_protocol,
-    v_session.server_id,
-    p_lab,
-    p_category,
-    left(v_title, 100),
-    E'Atendimento realizado via Chat ao Vivo com a equipe de TI.\n\n--- TRANSCRIÇÃO DA CONVERSA ---\n' || v_chat_transcript,
-    v_status_enum,
-    'Chat',
-    v_tech_id,
-    CASE WHEN v_status_clean = 'Concluído' THEN coalesce(nullif(trim(p_resolution), ''), 'Atendimento concluído via Chat ao Vivo.') ELSE NULL END,
-    coalesce(v_session.started_at, now()),
-    CASE WHEN v_status_clean = 'Concluído' THEN now() ELSE NULL END,
-    gen_random_uuid()
-  )
-  RETURNING tickets.id INTO v_new_ticket_id;
-
-  -- Registra no histórico do chamado
-  INSERT INTO public.ticket_updates(ticket_id, author_id, message, kind)
-  VALUES (
-    v_new_ticket_id,
-    v_tech_id,
-    CASE WHEN v_status_clean = 'Concluído'
-      THEN 'Chamado gerado e concluído a partir do Chat ao Vivo. Solução registrada: ' || coalesce(nullif(trim(p_resolution), ''), 'Atendimento prestado em tempo real.')
-      ELSE 'Chamado gerado a partir do Chat ao Vivo e mantido em atendimento presencial pela equipe técnica.'
-    END,
-    CASE WHEN v_status_clean = 'Concluído' THEN 'fechamento' ELSE 'status' END
-  );
-
-  -- Atualiza e encerra a sessão de chat vinculando ao chamado
-  UPDATE public.chat_sessions cs
-  SET status = 'closed',
-      ticket_id = v_new_ticket_id,
-      closed_at = now(),
-      closed_by = coalesce(v_tech_id, cs.closed_by),
-      notes = coalesce(nullif(trim(p_resolution), ''), cs.notes)
-  WHERE cs.id = p_session_id;
-
-  -- Notificação no chat para o docente
-  INSERT INTO public.chat_messages(session_id, sender_type, sender_id, sender_name, message)
-  VALUES (
-    p_session_id,
-    'system',
-    v_tech_id,
-    'Sistema LabInfo',
-    'Atendimento finalizado! Um e-mail com os detalhes do chamado (' || v_protocol || ') e o link de confirmação foi enviado para ' || v_session.server_email || '.'
-  );
-
-  RETURN jsonb_build_object(
-    'ticket_id', v_new_ticket_id,
-    'protocol', v_protocol,
-    'status', v_status_clean
-  );
-END $$;
-
-GRANT EXECUTE ON FUNCTION public.create_ticket_from_chat(uuid, uuid, uuid, text, text, text) TO anon, authenticated;
-
--- 3. Atualiza close_chat_session para usar a assinatura canônica
-CREATE OR REPLACE FUNCTION public.close_chat_session(p_session_id uuid, p_notes text default null)
-RETURNS boolean
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, auth AS $$
-DECLARE
-  v_sess record;
-BEGIN
-  SELECT * INTO v_sess FROM public.chat_sessions WHERE id = p_session_id;
-  IF v_sess.id IS NULL THEN
-    RETURN false;
-  END IF;
-
-  -- Se a sessão estava ativa e ainda não tinha chamado gerado, gera automaticamente o chamado concluído
-  IF v_sess.status = 'active' AND v_sess.ticket_id IS NULL THEN
-    PERFORM public.create_ticket_from_chat(
-      p_session_id,
-      null,
-      null,
-      null,
-      coalesce(p_notes, 'Atendimento concluído via Chat ao Vivo.'),
-      'Concluído'
-    );
-    RETURN true;
-  END IF;
-
-  UPDATE public.chat_sessions cs
-  SET status = 'closed',
-      closed_at = now(),
-      closed_by = coalesce(auth.uid(), cs.technician_id),
-      notes = coalesce(p_notes, cs.notes)
-  WHERE cs.id = p_session_id AND cs.status IN ('waiting', 'active');
-
-  INSERT INTO public.chat_messages(session_id, sender_type, sender_name, message)
-  VALUES (p_session_id, 'system', 'Sistema LabInfo', 'Atendimento de chat encerrado.');
-
-  RETURN true;
-END $$;
-
-GRANT EXECUTE ON FUNCTION public.close_chat_session(uuid, text) TO anon, authenticated;
-
--- -----------------------------------------------------------------------------
--- migrations/20260818_fix_ticket_feedback.sql
--- -----------------------------------------------------------------------------
--- Correção e robustez na confirmação de atendimento pelo servidor (feedback via e-mail)
-drop function if exists public.confirm_ticket_feedback(uuid);
-drop function if exists public.confirm_ticket_feedback(text);
-
-create or replace function public.confirm_ticket_feedback(p_token text)
-returns table(protocol text, confirmed_at timestamptz)
-language plpgsql security definer set search_path = public as $$
-declare
-  v_uuid uuid;
-  v_ticket public.tickets;
-begin
-  if p_token is null or btrim(p_token) = '' then
-    raise exception 'Token de confirmação não fornecido.';
-  end if;
-
-  begin
-    v_uuid := btrim(p_token)::uuid;
-  exception when others then
-    raise exception 'Link de confirmação inválido.';
-  end;
-
-  select * into v_ticket
-  from public.tickets
-  where feedback_token = v_uuid and deleted_at is null
-  limit 1;
-
-  if v_ticket.id is null then
-    raise exception 'Chamado não localizado ou link expirado.';
-  end if;
-
-  update public.tickets
-  set feedback_confirmed_at = coalesce(feedback_confirmed_at, now()),
-      updated_at = now()
-  where id = v_ticket.id;
-
-  return query
-  select v_ticket.protocol, coalesce(v_ticket.feedback_confirmed_at, now());
-end $$;
-
-grant execute on function public.confirm_ticket_feedback(text) to anon, authenticated;
-
--- Garante que o link gerado no e-mail de conclusão aponte corretamente para /labinfo/suporte/?feedback=
-create or replace function public.ticket_email_payload(t public.tickets)
-returns jsonb language sql stable security definer set search_path = public as $$
-  select jsonb_build_object(
-    'protocol', t.protocol,
-    'title', t.title,
-    'description', t.description,
-    'status', t.status,
-    'resolution', coalesce(t.resolution, 'Atendimento concluído.'),
-    'server_name', coalesce(s.full_name, 'Servidor'),
-    'lab', coalesce(l.name, 'Não informado'),
-    'category', coalesce(c.name, 'Não informada'),
-    'created_at', t.created_at,
-    'closed_at', t.closed_at,
-    'portal_url', 'https://coeritl.github.io/labinfo/suporte/',
-    'feedback_url', 'https://coeritl.github.io/labinfo/suporte/?feedback=' || t.feedback_token::text
-  )
-  from (select 1) x
-  left join public.servers s on s.id = t.server_id
-  left join public.labs l on l.id = t.lab_id
-  left join public.categories c on c.id = t.category_id
 $$;
 
 -- -----------------------------------------------------------------------------
@@ -2395,6 +1950,451 @@ end $$;
 grant execute on function public.clear_stale_chat_sessions() to authenticated;
 
 -- -----------------------------------------------------------------------------
+-- migrations/20260818_fix_create_ticket_from_chat_ambiguity.sql
+-- -----------------------------------------------------------------------------
+-- Migration: Resolução de ambiguidade na função create_ticket_from_chat
+-- Elimina sobrecargas duplicadas e estabelece uma assinatura única canônica
+
+-- 1. Remove explicitamente todas as versões sobrecarregadas anteriores
+DROP FUNCTION IF EXISTS public.create_ticket_from_chat(uuid, uuid, uuid, text, text, public.ticket_status);
+DROP FUNCTION IF EXISTS public.create_ticket_from_chat(uuid, uuid, uuid, text, text, text);
+DROP FUNCTION IF EXISTS public.create_ticket_from_chat(uuid, uuid, uuid, text, text);
+DROP FUNCTION IF EXISTS public.create_ticket_from_chat(uuid, text, text, text, text, text);
+DROP FUNCTION IF EXISTS public.create_ticket_from_chat(uuid, text, text);
+DROP FUNCTION IF EXISTS public.create_ticket_from_chat(uuid);
+
+-- 2. Cria a função canônica com assinatura única
+CREATE OR REPLACE FUNCTION public.create_ticket_from_chat(
+  p_session_id uuid,
+  p_lab uuid default null,
+  p_category uuid default null,
+  p_title text default null,
+  p_resolution text default null,
+  p_status text default 'Concluído'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth AS $$
+DECLARE
+  v_session record;
+  v_tech_id uuid;
+  v_protocol text;
+  v_new_ticket_id uuid;
+  v_chat_transcript text := '';
+  v_msg record;
+  v_title text;
+  v_status_clean text;
+  v_status_enum public.ticket_status;
+BEGIN
+  -- Garante status válido
+  v_status_clean := coalesce(nullif(trim(p_status), ''), 'Concluído');
+  IF v_status_clean NOT IN ('Recebido', 'Em atendimento', 'Concluído') THEN
+    v_status_clean := 'Concluído';
+  END IF;
+  v_status_enum := v_status_clean::public.ticket_status;
+
+  SELECT cs.*, s.id as server_id, s.full_name as server_name, s.siape as server_siape, s.email as server_email
+  INTO v_session
+  FROM public.chat_sessions cs
+  JOIN public.servers s ON s.id = cs.server_id
+  WHERE cs.id = p_session_id;
+
+  IF v_session.id IS NULL THEN
+    RAISE EXCEPTION 'Sessão de chat não encontrada.';
+  END IF;
+
+  -- Se já tiver chamado vinculado, apenas retorna os dados existentes
+  IF v_session.ticket_id IS NOT NULL THEN
+    SELECT protocol INTO v_protocol FROM public.tickets WHERE id = v_session.ticket_id;
+    RETURN jsonb_build_object(
+      'ticket_id', v_session.ticket_id,
+      'protocol', v_protocol,
+      'status', v_status_clean
+    );
+  END IF;
+
+  -- Identifica o técnico responsável
+  v_tech_id := auth.uid();
+  IF v_tech_id IS NULL THEN
+    v_tech_id := v_session.technician_id;
+  END IF;
+
+  -- Monta a transcrição do diálogo formatada
+  FOR v_msg IN
+    SELECT cm.sender_name, cm.sender_type, cm.message, cm.created_at
+    FROM public.chat_messages cm
+    WHERE cm.session_id = p_session_id
+    ORDER BY cm.created_at ASC
+  LOOP
+    v_chat_transcript := v_chat_transcript || '[' || to_char(v_msg.created_at at time zone 'America/Cuiaba', 'DD/MM/YYYY HH24:MI') || '] ' || v_msg.sender_name || ': ' || v_msg.message || E'\n';
+  END LOOP;
+
+  -- Gera número de protocolo
+  v_protocol := public.next_protocol(p_lab);
+  v_title := coalesce(nullif(trim(p_title), ''), 'Atendimento via Chat: ' || coalesce(v_session.subject, 'Dúvida/Suporte'));
+
+  -- Cria o chamado oficial com feedback_token
+  INSERT INTO public.tickets(
+    protocol,
+    server_id,
+    lab_id,
+    category_id,
+    title,
+    description,
+    status,
+    source,
+    assigned_to,
+    resolution,
+    started_at,
+    closed_at,
+    feedback_token
+  )
+  VALUES (
+    v_protocol,
+    v_session.server_id,
+    p_lab,
+    p_category,
+    left(v_title, 100),
+    E'Atendimento realizado via Chat ao Vivo com a equipe de TI.\n\n--- TRANSCRIÇÃO DA CONVERSA ---\n' || v_chat_transcript,
+    v_status_enum,
+    'Chat',
+    v_tech_id,
+    CASE WHEN v_status_clean = 'Concluído' THEN coalesce(nullif(trim(p_resolution), ''), 'Atendimento concluído via Chat ao Vivo.') ELSE NULL END,
+    coalesce(v_session.started_at, now()),
+    CASE WHEN v_status_clean = 'Concluído' THEN now() ELSE NULL END,
+    gen_random_uuid()
+  )
+  RETURNING tickets.id INTO v_new_ticket_id;
+
+  -- Registra no histórico do chamado
+  INSERT INTO public.ticket_updates(ticket_id, author_id, message, kind)
+  VALUES (
+    v_new_ticket_id,
+    v_tech_id,
+    CASE WHEN v_status_clean = 'Concluído'
+      THEN 'Chamado gerado e concluído a partir do Chat ao Vivo. Solução registrada: ' || coalesce(nullif(trim(p_resolution), ''), 'Atendimento prestado em tempo real.')
+      ELSE 'Chamado gerado a partir do Chat ao Vivo e mantido em atendimento presencial pela equipe técnica.'
+    END,
+    CASE WHEN v_status_clean = 'Concluído' THEN 'fechamento' ELSE 'status' END
+  );
+
+  -- Atualiza e encerra a sessão de chat vinculando ao chamado
+  UPDATE public.chat_sessions cs
+  SET status = 'closed',
+      ticket_id = v_new_ticket_id,
+      closed_at = now(),
+      closed_by = coalesce(v_tech_id, cs.closed_by),
+      notes = coalesce(nullif(trim(p_resolution), ''), cs.notes)
+  WHERE cs.id = p_session_id;
+
+  -- Notificação no chat para o docente
+  INSERT INTO public.chat_messages(session_id, sender_type, sender_id, sender_name, message)
+  VALUES (
+    p_session_id,
+    'system',
+    v_tech_id,
+    'Sistema LabInfo',
+    'Atendimento finalizado! Um e-mail com os detalhes do chamado (' || v_protocol || ') e o link de confirmação foi enviado para ' || v_session.server_email || '.'
+  );
+
+  RETURN jsonb_build_object(
+    'ticket_id', v_new_ticket_id,
+    'protocol', v_protocol,
+    'status', v_status_clean
+  );
+END $$;
+
+GRANT EXECUTE ON FUNCTION public.create_ticket_from_chat(uuid, uuid, uuid, text, text, text) TO anon, authenticated;
+
+-- 3. Atualiza close_chat_session para usar a assinatura canônica
+CREATE OR REPLACE FUNCTION public.close_chat_session(p_session_id uuid, p_notes text default null)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth AS $$
+DECLARE
+  v_sess record;
+BEGIN
+  SELECT * INTO v_sess FROM public.chat_sessions WHERE id = p_session_id;
+  IF v_sess.id IS NULL THEN
+    RETURN false;
+  END IF;
+
+  -- Se a sessão estava ativa e ainda não tinha chamado gerado, gera automaticamente o chamado concluído
+  IF v_sess.status = 'active' AND v_sess.ticket_id IS NULL THEN
+    PERFORM public.create_ticket_from_chat(
+      p_session_id,
+      null,
+      null,
+      null,
+      coalesce(p_notes, 'Atendimento concluído via Chat ao Vivo.'),
+      'Concluído'
+    );
+    RETURN true;
+  END IF;
+
+  UPDATE public.chat_sessions cs
+  SET status = 'closed',
+      closed_at = now(),
+      closed_by = coalesce(auth.uid(), cs.technician_id),
+      notes = coalesce(p_notes, cs.notes)
+  WHERE cs.id = p_session_id AND cs.status IN ('waiting', 'active');
+
+  INSERT INTO public.chat_messages(session_id, sender_type, sender_name, message)
+  VALUES (p_session_id, 'system', 'Sistema LabInfo', 'Atendimento de chat encerrado.');
+
+  RETURN true;
+END $$;
+
+GRANT EXECUTE ON FUNCTION public.close_chat_session(uuid, text) TO anon, authenticated;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260818_fix_ticket_feedback.sql
+-- -----------------------------------------------------------------------------
+-- Correção e robustez na confirmação de atendimento pelo servidor (feedback via e-mail)
+drop function if exists public.confirm_ticket_feedback(uuid);
+drop function if exists public.confirm_ticket_feedback(text);
+
+create or replace function public.confirm_ticket_feedback(p_token text)
+returns table(protocol text, confirmed_at timestamptz)
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uuid uuid;
+  v_ticket public.tickets;
+begin
+  if p_token is null or btrim(p_token) = '' then
+    raise exception 'Token de confirmação não fornecido.';
+  end if;
+
+  begin
+    v_uuid := btrim(p_token)::uuid;
+  exception when others then
+    raise exception 'Link de confirmação inválido.';
+  end;
+
+  select * into v_ticket
+  from public.tickets
+  where feedback_token = v_uuid and deleted_at is null
+  limit 1;
+
+  if v_ticket.id is null then
+    raise exception 'Chamado não localizado ou link expirado.';
+  end if;
+
+  update public.tickets
+  set feedback_confirmed_at = coalesce(feedback_confirmed_at, now()),
+      updated_at = now()
+  where id = v_ticket.id;
+
+  return query
+  select v_ticket.protocol, coalesce(v_ticket.feedback_confirmed_at, now());
+end $$;
+
+grant execute on function public.confirm_ticket_feedback(text) to anon, authenticated;
+
+-- Garante que o link gerado no e-mail de conclusão aponte corretamente para /labinfo/suporte/?feedback=
+create or replace function public.ticket_email_payload(t public.tickets)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'protocol', t.protocol,
+    'title', t.title,
+    'description', t.description,
+    'status', t.status,
+    'resolution', coalesce(t.resolution, 'Atendimento concluído.'),
+    'server_name', coalesce(s.full_name, 'Servidor'),
+    'lab', coalesce(l.name, 'Não informado'),
+    'category', coalesce(c.name, 'Não informada'),
+    'created_at', t.created_at,
+    'closed_at', t.closed_at,
+    'portal_url', 'https://coeritl.github.io/labinfo/suporte/',
+    'feedback_url', 'https://coeritl.github.io/labinfo/suporte/?feedback=' || t.feedback_token::text
+  )
+  from (select 1) x
+  left join public.servers s on s.id = t.server_id
+  left join public.labs l on l.id = t.lab_id
+  left join public.categories c on c.id = t.category_id
+$$;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260818_chat_feedback_email.sql
+-- -----------------------------------------------------------------------------
+-- Migration: Envio automático de e-mail de feedback e chamado ao finalizar chat ao vivo
+-- Garante que todo atendimento de chat finalizado gere o chamado com histórico e link de feedback no e-mail do servidor
+
+create or replace function public.create_ticket_from_chat(
+  p_session_id uuid,
+  p_lab uuid default null,
+  p_category uuid default null,
+  p_title text default null,
+  p_resolution text default null,
+  p_status text default 'Concluído'
+)
+returns jsonb
+language plpgsql security definer set search_path = public, auth as $$
+declare
+  v_session record;
+  v_tech_id uuid;
+  v_protocol text;
+  v_new_ticket_id uuid;
+  v_chat_transcript text := '';
+  v_msg record;
+  v_title text;
+  v_status text := coalesce(nullif(trim(p_status), ''), 'Concluído');
+begin
+  select cs.*, s.id as server_id, s.full_name as server_name, s.siape as server_siape, s.email as server_email
+  into v_session
+  from public.chat_sessions cs
+  join public.servers s on s.id = cs.server_id
+  where cs.id = p_session_id;
+
+  if v_session.id is null then
+    raise exception 'Sessão de chat não encontrada.';
+  end if;
+
+  -- Se já tiver chamado vinculado, apenas retorna os dados existentes
+  if v_session.ticket_id is not null then
+    select protocol into v_protocol from public.tickets where id = v_session.ticket_id;
+    return jsonb_build_object(
+      'ticket_id', v_session.ticket_id,
+      'protocol', v_protocol,
+      'status', v_status
+    );
+  end if;
+
+  -- Identifica o técnico responsável
+  v_tech_id := auth.uid();
+  if v_tech_id is null then
+    v_tech_id := v_session.technician_id;
+  end if;
+
+  -- Monta a transcrição do diálogo formatada
+  for v_msg in
+    select cm.sender_name, cm.sender_type, cm.message, cm.created_at
+    from public.chat_messages cm
+    where cm.session_id = p_session_id
+    order by cm.created_at asc
+  loop
+    v_chat_transcript := v_chat_transcript || '[' || to_char(v_msg.created_at at time zone 'America/Cuiaba', 'DD/MM/YYYY HH24:MI') || '] ' || v_msg.sender_name || ': ' || v_msg.message || E'\n';
+  end loop;
+
+  -- Gera número de protocolo
+  v_protocol := public.next_protocol(p_lab);
+  v_title := coalesce(nullif(trim(p_title), ''), 'Atendimento via Chat: ' || coalesce(v_session.subject, 'Dúvida/Suporte'));
+
+  -- Cria o chamado oficial com feedback_token
+  insert into public.tickets(
+    protocol,
+    server_id,
+    lab_id,
+    category_id,
+    title,
+    description,
+    status,
+    source,
+    assigned_to,
+    resolution,
+    started_at,
+    closed_at,
+    feedback_token
+  )
+  values (
+    v_protocol,
+    v_session.server_id,
+    p_lab,
+    p_category,
+    left(v_title, 100),
+    E'Atendimento realizado via Chat ao Vivo com a equipe de TI.\n\n--- TRANSCRIÇÃO DA CONVERSA ---\n' || v_chat_transcript,
+    v_status,
+    'Chat',
+    v_tech_id,
+    case when v_status = 'Concluído' then coalesce(nullif(trim(p_resolution), ''), 'Atendimento concluído via Chat ao Vivo.') else null end,
+    coalesce(v_session.started_at, now()),
+    case when v_status = 'Concluído' then now() else null end,
+    gen_random_uuid()
+  )
+  returning tickets.id into v_new_ticket_id;
+
+  -- Registra no histórico do chamado
+  insert into public.ticket_updates(ticket_id, author_id, message, kind)
+  values (
+    v_new_ticket_id,
+    v_tech_id,
+    case when v_status = 'Concluído'
+      then 'Chamado gerado e concluído a partir do Chat ao Vivo. Solução registrada: ' || coalesce(nullif(trim(p_resolution), ''), 'Atendimento prestado em tempo real.')
+      else 'Chamado gerado a partir do Chat ao Vivo e mantido em atendimento presencial pela equipe técnica.'
+    end,
+    case when v_status = 'Concluído' then 'fechamento' else 'status' end
+  );
+
+  -- Atualiza e encerra a sessão de chat vinculando ao chamado
+  update public.chat_sessions cs
+  set status = 'closed',
+      ticket_id = v_new_ticket_id,
+      closed_at = now(),
+      closed_by = coalesce(v_tech_id, cs.closed_by),
+      notes = coalesce(nullif(trim(p_resolution), ''), cs.notes)
+  where cs.id = p_session_id;
+
+  -- Notificação no chat para o docente
+  insert into public.chat_messages(session_id, sender_type, sender_id, sender_name, message)
+  values (
+    p_session_id,
+    'system',
+    v_tech_id,
+    'Sistema LabInfo',
+    'Atendimento finalizado! Um e-mail com os detalhes do chamado (' || v_protocol || ') e o link de confirmação foi enviado para ' || v_session.server_email || '.'
+  );
+
+  return jsonb_build_object(
+    'ticket_id', v_new_ticket_id,
+    'protocol', v_protocol,
+    'status', v_status
+  );
+end $$;
+
+grant execute on function public.create_ticket_from_chat(uuid, uuid, uuid, text, text, text) to anon, authenticated;
+
+-- Encerrar chat garantindo criação de chamado e e-mail de feedback se for uma conversa ativa
+create or replace function public.close_chat_session(p_session_id uuid, p_notes text default null)
+returns boolean language plpgsql security definer set search_path = public, auth as $$
+declare
+  v_sess record;
+begin
+  select * into v_sess from public.chat_sessions where id = p_session_id;
+  if v_sess.id is null then
+    return false;
+  end if;
+
+  -- Se a sessão estava ativa e ainda não tinha chamado gerado, gera automaticamente o chamado concluído
+  if v_sess.status = 'active' and v_sess.ticket_id is null then
+    perform public.create_ticket_from_chat(
+      p_session_id,
+      null,
+      null,
+      null,
+      coalesce(p_notes, 'Atendimento concluído via Chat ao Vivo.'),
+      'Concluído'
+    );
+    return true;
+  end if;
+
+  update public.chat_sessions cs
+  set status = 'closed',
+      closed_at = now(),
+      closed_by = coalesce(auth.uid(), cs.technician_id),
+      notes = coalesce(p_notes, cs.notes)
+  where cs.id = p_session_id and cs.status in ('waiting', 'active');
+
+  insert into public.chat_messages(session_id, sender_type, sender_name, message)
+  values (p_session_id, 'system', 'Sistema LabInfo', 'Atendimento de chat encerrado.');
+
+  return true;
+end $$;
+
+grant execute on function public.close_chat_session(uuid, text) to anon, authenticated;
+
+-- -----------------------------------------------------------------------------
 -- migrations/20260819_ifms_schedule_intervals.sql
 -- -----------------------------------------------------------------------------
 -- Atualização dos horários de funcionamento e cálculo de blocos oficiais do IFMS Campus Três Lagoas.
@@ -2572,6 +2572,98 @@ begin
 end $$;
 
 -- -----------------------------------------------------------------------------
+-- migrations/20260820_staff_reservation_ranges.sql
+-- -----------------------------------------------------------------------------
+-- Permite que técnicos criem e editem reservas por horário inicial e final.
+-- As funções antigas baseadas em blocos são preservadas para compatibilidade.
+create or replace function public.staff_create_reservation_range(
+  p_server uuid, p_lab uuid, p_subject text, p_start timestamptz, p_end timestamptz,
+  p_notes text default null, p_source text default 'Equipe',
+  p_recurrence text default 'none', p_until date default null
+)
+returns public.reservations language plpgsql security definer set search_path=public as $$
+declare
+  r public.reservations; first_r public.reservations;
+  occurrence timestamptz:=p_start; finish timestamptz;
+  requested_duration interval:=p_end-p_start;
+  final_date date:=coalesce(p_until,(p_start at time zone 'America/Cuiaba')::date);
+  group_id uuid:=gen_random_uuid();
+begin
+  if public.current_role() not in ('tecnico','supervisor') then raise exception 'Acesso negado.'; end if;
+  perform public.validate_reservation_slot(p_start,p_end);
+  if p_recurrence not in ('none','weekly') then raise exception 'Repetição inválida.'; end if;
+  if final_date<(p_start at time zone 'America/Cuiaba')::date
+     or final_date>(p_start at time zone 'America/Cuiaba')::date+interval '180 days' then
+    raise exception 'Período inválido.';
+  end if;
+  loop
+    if extract(isodow from occurrence at time zone 'America/Cuiaba') between 1 and 6 then
+      finish:=occurrence+requested_duration;
+      perform public.assert_reservation_available(p_lab,occurrence,finish,null);
+      insert into public.reservations(
+        protocol,server_id,lab_id,subject,notes,starts_at,ends_at,status,source,
+        confirmed_at,authorized_at,authorized_by,created_by,recurrence_group,recurrence
+      ) values (
+        public.next_reservation_protocol(),p_server,p_lab,btrim(p_subject),nullif(btrim(p_notes),''),
+        occurrence,finish,'Autorizada',case when p_source='CSV' then 'CSV' else 'Equipe' end,
+        now(),now(),auth.uid(),auth.uid(),group_id,p_recurrence
+      ) returning * into r;
+      if first_r.id is null then first_r:=r; end if;
+    end if;
+    exit when p_recurrence='none' or (occurrence at time zone 'America/Cuiaba')::date>=final_date;
+    occurrence:=occurrence+interval '7 days';
+    exit when (occurrence at time zone 'America/Cuiaba')::date>final_date;
+  end loop;
+  if first_r.id is null then raise exception 'A série não possui nenhuma data válida.'; end if;
+  return first_r;
+end $$;
+
+create or replace function public.staff_edit_reservation_range(
+  p_id uuid, p_server uuid, p_lab uuid, p_subject text,
+  p_start timestamptz, p_end timestamptz,
+  p_notes text default null, p_scope text default 'occurrence'
+)
+returns public.reservations language plpgsql security definer set search_path=public as $$
+declare
+  base public.reservations; item public.reservations; result public.reservations;
+  target_start timestamptz; target_end timestamptz;
+  requested_duration interval:=p_end-p_start; shift interval; recipient text;
+begin
+  if public.current_role() not in ('tecnico','supervisor') then raise exception 'Acesso negado.'; end if;
+  if p_scope not in ('occurrence','series') then raise exception 'Escopo inválido.'; end if;
+  if length(btrim(coalesce(p_subject,''))) not between 2 and 160 then raise exception 'Informe a disciplina ou atividade.'; end if;
+  perform public.validate_reservation_slot(p_start,p_end);
+  select * into base from public.reservations where id=p_id for update;
+  if base.id is null then raise exception 'Reserva não encontrada.'; end if;
+  shift:=p_start-base.starts_at;
+  for item in
+    select * from public.reservations
+    where id=p_id or (p_scope='series' and recurrence_group=base.recurrence_group)
+    order by starts_at for update
+  loop
+    target_start:=case when p_scope='series' then item.starts_at+shift else p_start end;
+    target_end:=target_start+requested_duration;
+    perform public.validate_reservation_slot(target_start,target_end);
+    perform public.assert_reservation_available(p_lab,target_start,target_end,item.id);
+    update public.reservations set
+      server_id=p_server,lab_id=p_lab,subject=btrim(p_subject),
+      notes=nullif(btrim(coalesce(p_notes,'')),''),starts_at=target_start,
+      ends_at=target_end,updated_at=now()
+    where id=item.id;
+  end loop;
+  select * into result from public.reservations where id=p_id;
+  select lower(email) into recipient from public.servers where id=p_server and active;
+  if recipient is not null then
+    insert into public.email_outbox(reservation_id,recipient,event_type,payload)
+    values(result.id,recipient,'reserva_alterada',public.reservation_payload(result));
+  end if;
+  return result;
+end $$;
+
+grant execute on function public.staff_create_reservation_range(uuid,uuid,text,timestamptz,timestamptz,text,text,text,date) to authenticated;
+grant execute on function public.staff_edit_reservation_range(uuid,uuid,uuid,text,timestamptz,timestamptz,text,text) to authenticated;
+
+-- -----------------------------------------------------------------------------
 -- migrations/20260820_optional_reservation_notifications.sql
 -- -----------------------------------------------------------------------------
 -- Permite editar ou cancelar reservas sem obrigar o envio de e-mail.
@@ -2683,225 +2775,115 @@ as $$
 $$;
 
 -- -----------------------------------------------------------------------------
--- migrations/20260820_staff_reservation_ranges.sql
+-- migrations/20260821_reservation_production_hardening.sql
 -- -----------------------------------------------------------------------------
--- Permite que técnicos criem e editem reservas por horário inicial e final.
--- As funções antigas baseadas em blocos são preservadas para compatibilidade.
-create or replace function public.staff_create_reservation_range(
-  p_server uuid, p_lab uuid, p_subject text, p_start timestamptz, p_end timestamptz,
-  p_notes text default null, p_source text default 'Equipe',
-  p_recurrence text default 'none', p_until date default null
+-- Proteções finais do módulo de reservas para uso em produção.
+create extension if not exists btree_gist with schema extensions;
+
+alter table public.reservations add column if not exists confirmation_expires_at timestamptz;
+update public.reservations set confirmation_expires_at=created_at+interval '72 hours' where confirmation_expires_at is null;
+alter table public.reservations
+  alter column confirmation_expires_at set default (now()+interval '72 hours'),
+  alter column confirmation_expires_at set not null;
+
+alter table public.reservations drop constraint if exists reservations_no_schedule_overlap;
+alter table public.reservations add constraint reservations_no_schedule_overlap
+  exclude using gist (lab_id with =,tstzrange(starts_at,ends_at,'[)') with &&)
+  where (status<>'Cancelada');
+
+create or replace function public.create_public_reservation_range(
+  p_siape text,p_lab uuid,p_subject text,p_start timestamptz,p_end timestamptz,
+  p_notes text default null,p_recurrence text default 'none',p_until date default null
 )
-returns public.reservations language plpgsql security definer set search_path=public as $$
+returns table(id uuid,protocol text,status text) language plpgsql security definer set search_path=public,extensions as $$
 declare
-  r public.reservations; first_r public.reservations;
-  occurrence timestamptz:=p_start; finish timestamptz;
-  requested_duration interval:=p_end-p_start;
+  s public.servers;r public.reservations;first_r public.reservations;
+  occurrence timestamptz:=p_start;finish timestamptz;requested_duration interval:=p_end-p_start;
   final_date date:=coalesce(p_until,(p_start at time zone 'America/Cuiaba')::date);
-  group_id uuid:=gen_random_uuid();
+  group_id uuid:=gen_random_uuid();count_items integer:=0;
 begin
-  if public.current_role() not in ('tecnico','supervisor') then raise exception 'Acesso negado.'; end if;
+  select * into s from public.servers where siape=btrim(p_siape) and active limit 1;
+  if s.id is null then raise exception 'Servidor não localizado ou inativo.';end if;
+  if not exists(select 1 from public.labs lab where lab.id=p_lab and lab.active and lab.reservation_enabled) then
+    raise exception 'Laboratório indisponível para reservas públicas.';
+  end if;
+  if p_start<=now() then raise exception 'Não é possível solicitar uma reserva em data ou horário passado.';end if;
+  if length(btrim(coalesce(p_subject,''))) not between 2 and 160 then raise exception 'Informe a disciplina ou atividade.';end if;
   perform public.validate_reservation_slot(p_start,p_end);
-  if p_recurrence not in ('none','weekly') then raise exception 'Repetição inválida.'; end if;
-  if final_date<(p_start at time zone 'America/Cuiaba')::date
-     or final_date>(p_start at time zone 'America/Cuiaba')::date+interval '180 days' then
-    raise exception 'Período inválido.';
+  if p_recurrence not in ('none','weekly') then raise exception 'Repetição inválida.';end if;
+  if final_date<(p_start at time zone 'America/Cuiaba')::date or final_date>(p_start at time zone 'America/Cuiaba')::date+interval '180 days' then
+    raise exception 'A data final deve estar dentro dos próximos 180 dias.';
   end if;
   loop
     if extract(isodow from occurrence at time zone 'America/Cuiaba') between 1 and 6 then
       finish:=occurrence+requested_duration;
       perform public.assert_reservation_available(p_lab,occurrence,finish,null);
-      insert into public.reservations(
-        protocol,server_id,lab_id,subject,notes,starts_at,ends_at,status,source,
-        confirmed_at,authorized_at,authorized_by,created_by,recurrence_group,recurrence
-      ) values (
-        public.next_reservation_protocol(),p_server,p_lab,btrim(p_subject),nullif(btrim(p_notes),''),
-        occurrence,finish,'Autorizada',case when p_source='CSV' then 'CSV' else 'Equipe' end,
-        now(),now(),auth.uid(),auth.uid(),group_id,p_recurrence
-      ) returning * into r;
-      if first_r.id is null then first_r:=r; end if;
+      insert into public.reservations(protocol,server_id,lab_id,subject,notes,starts_at,ends_at,recurrence_group,recurrence)
+      values(public.next_reservation_protocol(),s.id,p_lab,btrim(p_subject),nullif(btrim(p_notes),''),occurrence,finish,group_id,p_recurrence)
+      returning * into r;
+      if count_items=0 then first_r:=r;end if;count_items:=count_items+1;
     end if;
     exit when p_recurrence='none' or (occurrence at time zone 'America/Cuiaba')::date>=final_date;
     occurrence:=occurrence+interval '7 days';
     exit when (occurrence at time zone 'America/Cuiaba')::date>final_date;
   end loop;
-  if first_r.id is null then raise exception 'A série não possui nenhuma data válida.'; end if;
-  return first_r;
+  if count_items=0 then raise exception 'A série não possui nenhuma data válida.';end if;
+  insert into public.email_outbox(reservation_id,recipient,event_type,payload)
+  values(first_r.id,lower(s.email),'reserva_confirmar',public.reservation_payload(first_r)||jsonb_build_object('series_count',count_items,'series_until',final_date));
+  return query select first_r.id,first_r.protocol,first_r.status;
+exception when exclusion_violation then
+  raise exception 'O laboratório já possui reserva neste horário.';
 end $$;
 
-create or replace function public.staff_edit_reservation_range(
-  p_id uuid, p_server uuid, p_lab uuid, p_subject text,
-  p_start timestamptz, p_end timestamptz,
-  p_notes text default null, p_scope text default 'occurrence'
-)
-returns public.reservations language plpgsql security definer set search_path=public as $$
-declare
-  base public.reservations; item public.reservations; result public.reservations;
-  target_start timestamptz; target_end timestamptz;
-  requested_duration interval:=p_end-p_start; shift interval; recipient text;
+create or replace function public.confirm_reservation(p_token uuid)
+returns table(protocol text,status text,confirmed_at timestamptz)
+language plpgsql security definer set search_path=public as $$
+declare r public.reservations;s public.servers;
 begin
-  if public.current_role() not in ('tecnico','supervisor') then raise exception 'Acesso negado.'; end if;
-  if p_scope not in ('occurrence','series') then raise exception 'Escopo inválido.'; end if;
-  if length(btrim(coalesce(p_subject,''))) not between 2 and 160 then raise exception 'Informe a disciplina ou atividade.'; end if;
-  perform public.validate_reservation_slot(p_start,p_end);
-  select * into base from public.reservations where id=p_id for update;
-  if base.id is null then raise exception 'Reserva não encontrada.'; end if;
-  shift:=p_start-base.starts_at;
-  for item in
-    select * from public.reservations
-    where id=p_id or (p_scope='series' and recurrence_group=base.recurrence_group)
-    order by starts_at for update
-  loop
-    target_start:=case when p_scope='series' then item.starts_at+shift else p_start end;
-    target_end:=target_start+requested_duration;
-    perform public.validate_reservation_slot(target_start,target_end);
-    perform public.assert_reservation_available(p_lab,target_start,target_end,item.id);
-    update public.reservations set
-      server_id=p_server,lab_id=p_lab,subject=btrim(p_subject),
-      notes=nullif(btrim(coalesce(p_notes,'')),''),starts_at=target_start,
-      ends_at=target_end,updated_at=now()
-    where id=item.id;
-  end loop;
-  select * into result from public.reservations where id=p_id;
-  select lower(email) into recipient from public.servers where id=p_server and active;
-  if recipient is not null then
+  select reservation.* into r from public.reservations reservation
+  where reservation.confirmation_token=p_token order by reservation.starts_at limit 1 for update;
+  if r.id is null then raise exception 'Link inválido ou reserva indisponível.';end if;
+  if r.status not in ('Aguardando confirmação','Aguardando autorização') then
+    raise exception 'Esta reserva não está mais aguardando confirmação.';
+  end if;
+  if r.confirmed_at is null and r.confirmation_expires_at<now() then
+    raise exception 'Este link de confirmação expirou. Entre em contato com a equipe técnica.';
+  end if;
+  if r.confirmed_at is null then
+    update public.reservations reservation set status='Aguardando autorização',confirmed_at=now(),updated_at=now()
+    where reservation.recurrence_group=r.recurrence_group and reservation.status='Aguardando confirmação';
+  end if;
+  select reservation.* into r from public.reservations reservation where reservation.id=r.id;
+  select server.* into s from public.servers server where server.id=r.server_id and server.active;
+  if r.confirmed_at is not null and s.id is not null and not exists(
+    select 1 from public.email_outbox outbox where outbox.reservation_id=r.id and outbox.event_type='reserva_confirmada'
+  ) then
     insert into public.email_outbox(reservation_id,recipient,event_type,payload)
-    values(result.id,recipient,'reserva_alterada',public.reservation_payload(result));
+    values(r.id,lower(s.email),'reserva_confirmada',public.reservation_payload(r));
   end if;
-  return result;
+  return query select r.protocol,r.status,r.confirmed_at;
 end $$;
 
-grant execute on function public.staff_create_reservation_range(uuid,uuid,text,timestamptz,timestamptz,text,text,text,date) to authenticated;
-grant execute on function public.staff_edit_reservation_range(uuid,uuid,uuid,text,timestamptz,timestamptz,text,text) to authenticated;
-
--- -----------------------------------------------------------------------------
--- migrations/20260821_email_operations_health.sql
--- -----------------------------------------------------------------------------
--- Observabilidade e reprocessamento seguro da fila de notificações.
-alter table public.email_outbox
-  add column if not exists manual_retry_at timestamptz,
-  add column if not exists manual_retry_by uuid references public.profiles(id) on delete set null;
-
-create or replace function public.apps_script_finish_outbox(
-  p_secret text,p_id bigint,p_success boolean,p_error text default null
-) returns void language plpgsql security definer set search_path=public as $$
+create or replace function public.public_reservation_schedule(p_lab uuid,p_from date,p_to date)
+returns table(id uuid,subject text,server_name text,starts_at timestamptz,ends_at timestamptz,status text)
+language plpgsql stable security definer set search_path=public as $$
 begin
-  if not public.integration_secret_valid(p_secret) then raise exception 'Credencial inválida'; end if;
-  if p_success then
-    update public.email_outbox set status='sent',sent_at=coalesce(sent_at,now()),last_error=null
-    where id=p_id and status<>'sent';
-  else
-    update public.email_outbox set
-      status=case when attempts>=5 then 'failed' else 'pending' end,
-      available_at=now()+interval '30 minutes',
-      last_error=left(coalesce(p_error,'Erro desconhecido'),1000)
-    where id=p_id and status='processing';
+  if p_to<p_from or p_to>p_from+42 then raise exception 'Período de consulta inválido.';end if;
+  if not exists(select 1 from public.labs lab where lab.id=p_lab and lab.active and lab.reservation_enabled) then
+    raise exception 'Laboratório indisponível para consulta pública.';
   end if;
+  return query select r.id,
+    case when r.status='Autorizada' then r.subject else 'Horário em análise' end,
+    case when r.status='Autorizada' then s.full_name else null end,
+    r.starts_at,r.ends_at,r.status
+  from public.reservations r join public.servers s on s.id=r.server_id
+  where r.lab_id=p_lab and r.status<>'Cancelada'
+    and (r.starts_at at time zone 'America/Cuiaba')::date between p_from and p_to order by r.starts_at;
 end $$;
 
-create or replace function public.retry_email_outbox(p_id bigint) returns void
-language plpgsql security definer set search_path=public as $$
-begin
-  if public.current_role()<>'tecnico' then raise exception 'Apenas técnicos podem reenviar notificações'; end if;
-  update public.email_outbox set status='pending',available_at=now(),claimed_at=null,
-    attempts=0,last_error=null,manual_retry_at=now(),manual_retry_by=auth.uid()
-  where id=p_id and (
-    status='failed' or
-    (status='pending' and available_at<now()-interval '5 minutes') or
-    (status='processing' and claimed_at<now()-interval '10 minutes')
-  );
-  if not found then raise exception 'A notificação não está disponível para reenvio'; end if;
-end $$;
-grant execute on function public.retry_email_outbox(bigint) to authenticated;
-
-create or replace function public.maintenance_metrics() returns jsonb
-language plpgsql security definer set search_path=public as $$
-declare m public.integration_runtime_metrics;
-begin
-  if public.current_role() not in ('tecnico','supervisor') then raise exception 'Acesso negado'; end if;
-  select * into m from public.integration_runtime_metrics where id=true;
-  return jsonb_build_object(
-    'database_bytes',pg_database_size(current_database()),
-    'attachment_bytes',coalesce((select sum(size_bytes) from public.attachments),0),
-    'attachment_count',(select count(*) from public.attachments),
-    'ticket_count',(select count(*) from public.tickets),
-    'outbox_pending',(select count(*) from public.email_outbox where status='pending'),
-    'outbox_processing',(select count(*) from public.email_outbox where status='processing'),
-    'outbox_failed',(select count(*) from public.email_outbox where status='failed'),
-    'outbox_overdue',(select count(*) from public.email_outbox where (status='pending' and available_at<now()-interval '5 minutes') or (status='processing' and claimed_at<now()-interval '10 minutes')),
-    'outbox_sent_today',(select count(*) from public.email_outbox where status='sent' and sent_at>=current_date),
-    'outbox_last_error',(select last_error from public.email_outbox where last_error is not null order by id desc limit 1),
-    'outbox_problems',coalesce((select jsonb_agg(to_jsonb(q)) from (
-      select o.id,o.recipient,o.event_type,o.status,o.attempts,o.available_at,o.last_error,
-             coalesce(t.protocol,r.protocol) protocol
-      from public.email_outbox o
-      left join public.tickets t on t.id=o.ticket_id
-      left join public.reservations r on r.id=o.reservation_id
-      where o.status='failed'
-         or (o.status='pending' and o.available_at<now()-interval '5 minutes')
-         or (o.status='processing' and o.claimed_at<now()-interval '10 minutes')
-      order by o.id desc limit 25
-    ) q),'[]'::jsonb),
-    'sent_today',m.sent_today,'sent_month',m.sent_month,'email_quota_remaining',m.email_quota_remaining,
-    'inbox_runs_today',m.inbox_runs_today,'outbox_runs_today',m.outbox_runs_today,
-    'last_inbox_run',m.last_inbox_run,'last_outbox_run',m.last_outbox_run,'updated_at',m.updated_at
-  );
-end $$;
-grant execute on function public.maintenance_metrics() to authenticated;
-
--- Chamados originados no chat já nascem no estado final escolhido pelo técnico.
--- Por isso devem gerar um único evento: conclusão ou permanência em atendimento.
-create or replace function public.queue_ticket_email() returns trigger
-language plpgsql security definer set search_path=public as $$
-declare v_email text; v_event text;
-begin
-  v_email:=public.ticket_email(new);
-  if v_email is null then return new; end if;
-  if tg_op='INSERT' then
-    if new.source='Chat' then
-      v_event:=case when new.status='Concluído' then 'concluido' else 'em_atendimento' end;
-    else
-      v_event:=case when new.source='Tecnico' then 'aberto_pelo_tecnico' else 'recebido' end;
-    end if;
-  elsif new.status is distinct from old.status and new.status='Em atendimento' then v_event:='em_atendimento';
-  elsif new.status is distinct from old.status and new.status='Concluído' then v_event:='concluido';
-  else return new;
-  end if;
-  insert into public.email_outbox(ticket_id,recipient,event_type,payload)
-  values(new.id,v_email,v_event,public.ticket_email_payload(new));
-  return new;
-end $$;
-
--- -----------------------------------------------------------------------------
--- migrations/20260821_email_payload_by_ticket_status.sql
--- -----------------------------------------------------------------------------
--- Dados de conclusão só devem existir no payload quando o chamado estiver concluído.
-create or replace function public.ticket_email_payload(t public.tickets)
-returns jsonb
-language sql
-stable
-security definer
-set search_path=public
-as $$
-  select jsonb_build_object(
-    'protocol',t.protocol,
-    'title',t.title,
-    'description',t.description,
-    'status',t.status,
-    'resolution',case when t.status='Concluído' then coalesce(t.resolution,'Atendimento concluído.') else null end,
-    'server_name',coalesce(s.full_name,t.guest_email,'Remetente por e-mail'),
-    'lab',coalesce(l.name,'Não informado'),
-    'category',coalesce(c.name,'Não informada'),
-    'created_at',t.created_at,
-    'closed_at',t.closed_at,
-    'portal_url','https://labinfo.tl.ifms.edu.br/suporte/',
-    'feedback_url',case when t.status='Concluído' then 'https://labinfo.tl.ifms.edu.br/suporte/?feedback='||t.feedback_token::text else null end
-  )
-  from (select 1) x
-  left join public.servers s on s.id=t.server_id
-  left join public.labs l on l.id=t.lab_id
-  left join public.categories c on c.id=t.category_id
-$$;
+grant execute on function public.create_public_reservation_range(text,uuid,text,timestamptz,timestamptz,text,text,date) to anon,authenticated;
+grant execute on function public.confirm_reservation(uuid) to anon,authenticated;
+grant execute on function public.public_reservation_schedule(uuid,date,date) to anon,authenticated;
 
 -- -----------------------------------------------------------------------------
 -- migrations/20260821_fix_public_reservation_id_ambiguity.sql
@@ -3070,117 +3052,6 @@ grant execute on function public.staff_reservation_stats() to authenticated;
 grant execute on function public.staff_reservation_history_page(text,integer,integer) to authenticated;
 
 -- -----------------------------------------------------------------------------
--- migrations/20260821_reservation_production_hardening.sql
--- -----------------------------------------------------------------------------
--- Proteções finais do módulo de reservas para uso em produção.
-create extension if not exists btree_gist with schema extensions;
-
-alter table public.reservations add column if not exists confirmation_expires_at timestamptz;
-update public.reservations set confirmation_expires_at=created_at+interval '72 hours' where confirmation_expires_at is null;
-alter table public.reservations
-  alter column confirmation_expires_at set default (now()+interval '72 hours'),
-  alter column confirmation_expires_at set not null;
-
-alter table public.reservations drop constraint if exists reservations_no_schedule_overlap;
-alter table public.reservations add constraint reservations_no_schedule_overlap
-  exclude using gist (lab_id with =,tstzrange(starts_at,ends_at,'[)') with &&)
-  where (status<>'Cancelada');
-
-create or replace function public.create_public_reservation_range(
-  p_siape text,p_lab uuid,p_subject text,p_start timestamptz,p_end timestamptz,
-  p_notes text default null,p_recurrence text default 'none',p_until date default null
-)
-returns table(id uuid,protocol text,status text) language plpgsql security definer set search_path=public,extensions as $$
-declare
-  s public.servers;r public.reservations;first_r public.reservations;
-  occurrence timestamptz:=p_start;finish timestamptz;requested_duration interval:=p_end-p_start;
-  final_date date:=coalesce(p_until,(p_start at time zone 'America/Cuiaba')::date);
-  group_id uuid:=gen_random_uuid();count_items integer:=0;
-begin
-  select * into s from public.servers where siape=btrim(p_siape) and active limit 1;
-  if s.id is null then raise exception 'Servidor não localizado ou inativo.';end if;
-  if not exists(select 1 from public.labs lab where lab.id=p_lab and lab.active and lab.reservation_enabled) then
-    raise exception 'Laboratório indisponível para reservas públicas.';
-  end if;
-  if p_start<=now() then raise exception 'Não é possível solicitar uma reserva em data ou horário passado.';end if;
-  if length(btrim(coalesce(p_subject,''))) not between 2 and 160 then raise exception 'Informe a disciplina ou atividade.';end if;
-  perform public.validate_reservation_slot(p_start,p_end);
-  if p_recurrence not in ('none','weekly') then raise exception 'Repetição inválida.';end if;
-  if final_date<(p_start at time zone 'America/Cuiaba')::date or final_date>(p_start at time zone 'America/Cuiaba')::date+interval '180 days' then
-    raise exception 'A data final deve estar dentro dos próximos 180 dias.';
-  end if;
-  loop
-    if extract(isodow from occurrence at time zone 'America/Cuiaba') between 1 and 6 then
-      finish:=occurrence+requested_duration;
-      perform public.assert_reservation_available(p_lab,occurrence,finish,null);
-      insert into public.reservations(protocol,server_id,lab_id,subject,notes,starts_at,ends_at,recurrence_group,recurrence)
-      values(public.next_reservation_protocol(),s.id,p_lab,btrim(p_subject),nullif(btrim(p_notes),''),occurrence,finish,group_id,p_recurrence)
-      returning * into r;
-      if count_items=0 then first_r:=r;end if;count_items:=count_items+1;
-    end if;
-    exit when p_recurrence='none' or (occurrence at time zone 'America/Cuiaba')::date>=final_date;
-    occurrence:=occurrence+interval '7 days';
-    exit when (occurrence at time zone 'America/Cuiaba')::date>final_date;
-  end loop;
-  if count_items=0 then raise exception 'A série não possui nenhuma data válida.';end if;
-  insert into public.email_outbox(reservation_id,recipient,event_type,payload)
-  values(first_r.id,lower(s.email),'reserva_confirmar',public.reservation_payload(first_r)||jsonb_build_object('series_count',count_items,'series_until',final_date));
-  return query select first_r.id,first_r.protocol,first_r.status;
-exception when exclusion_violation then
-  raise exception 'O laboratório já possui reserva neste horário.';
-end $$;
-
-create or replace function public.confirm_reservation(p_token uuid)
-returns table(protocol text,status text,confirmed_at timestamptz)
-language plpgsql security definer set search_path=public as $$
-declare r public.reservations;s public.servers;
-begin
-  select reservation.* into r from public.reservations reservation
-  where reservation.confirmation_token=p_token order by reservation.starts_at limit 1 for update;
-  if r.id is null then raise exception 'Link inválido ou reserva indisponível.';end if;
-  if r.status not in ('Aguardando confirmação','Aguardando autorização') then
-    raise exception 'Esta reserva não está mais aguardando confirmação.';
-  end if;
-  if r.confirmed_at is null and r.confirmation_expires_at<now() then
-    raise exception 'Este link de confirmação expirou. Entre em contato com a equipe técnica.';
-  end if;
-  if r.confirmed_at is null then
-    update public.reservations reservation set status='Aguardando autorização',confirmed_at=now(),updated_at=now()
-    where reservation.recurrence_group=r.recurrence_group and reservation.status='Aguardando confirmação';
-  end if;
-  select reservation.* into r from public.reservations reservation where reservation.id=r.id;
-  select server.* into s from public.servers server where server.id=r.server_id and server.active;
-  if r.confirmed_at is not null and s.id is not null and not exists(
-    select 1 from public.email_outbox outbox where outbox.reservation_id=r.id and outbox.event_type='reserva_confirmada'
-  ) then
-    insert into public.email_outbox(reservation_id,recipient,event_type,payload)
-    values(r.id,lower(s.email),'reserva_confirmada',public.reservation_payload(r));
-  end if;
-  return query select r.protocol,r.status,r.confirmed_at;
-end $$;
-
-create or replace function public.public_reservation_schedule(p_lab uuid,p_from date,p_to date)
-returns table(id uuid,subject text,server_name text,starts_at timestamptz,ends_at timestamptz,status text)
-language plpgsql stable security definer set search_path=public as $$
-begin
-  if p_to<p_from or p_to>p_from+42 then raise exception 'Período de consulta inválido.';end if;
-  if not exists(select 1 from public.labs lab where lab.id=p_lab and lab.active and lab.reservation_enabled) then
-    raise exception 'Laboratório indisponível para consulta pública.';
-  end if;
-  return query select r.id,
-    case when r.status='Autorizada' then r.subject else 'Horário em análise' end,
-    case when r.status='Autorizada' then s.full_name else null end,
-    r.starts_at,r.ends_at,r.status
-  from public.reservations r join public.servers s on s.id=r.server_id
-  where r.lab_id=p_lab and r.status<>'Cancelada'
-    and (r.starts_at at time zone 'America/Cuiaba')::date between p_from and p_to order by r.starts_at;
-end $$;
-
-grant execute on function public.create_public_reservation_range(text,uuid,text,timestamptz,timestamptz,text,text,date) to anon,authenticated;
-grant execute on function public.confirm_reservation(uuid) to anon,authenticated;
-grant execute on function public.public_reservation_schedule(uuid,date,date) to anon,authenticated;
-
--- -----------------------------------------------------------------------------
 -- migrations/20260821_unified_ticket_protocol.sql
 -- -----------------------------------------------------------------------------
 -- Unifica todos os novos chamados no formato LAB-XXXXX, independentemente do laboratório.
@@ -3220,6 +3091,135 @@ end $$;
 
 revoke all on function public.next_protocol(uuid) from public;
 grant execute on function public.next_protocol(uuid) to authenticated;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260821_email_payload_by_ticket_status.sql
+-- -----------------------------------------------------------------------------
+-- Dados de conclusão só devem existir no payload quando o chamado estiver concluído.
+create or replace function public.ticket_email_payload(t public.tickets)
+returns jsonb
+language sql
+stable
+security definer
+set search_path=public
+as $$
+  select jsonb_build_object(
+    'protocol',t.protocol,
+    'title',t.title,
+    'description',t.description,
+    'status',t.status,
+    'resolution',case when t.status='Concluído' then coalesce(t.resolution,'Atendimento concluído.') else null end,
+    'server_name',coalesce(s.full_name,t.guest_email,'Remetente por e-mail'),
+    'lab',coalesce(l.name,'Não informado'),
+    'category',coalesce(c.name,'Não informada'),
+    'created_at',t.created_at,
+    'closed_at',t.closed_at,
+    'portal_url','https://labinfo.tl.ifms.edu.br/suporte/',
+    'feedback_url',case when t.status='Concluído' then 'https://labinfo.tl.ifms.edu.br/suporte/?feedback='||t.feedback_token::text else null end
+  )
+  from (select 1) x
+  left join public.servers s on s.id=t.server_id
+  left join public.labs l on l.id=t.lab_id
+  left join public.categories c on c.id=t.category_id
+$$;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260821_email_operations_health.sql
+-- -----------------------------------------------------------------------------
+-- Observabilidade e reprocessamento seguro da fila de notificações.
+alter table public.email_outbox
+  add column if not exists manual_retry_at timestamptz,
+  add column if not exists manual_retry_by uuid references public.profiles(id) on delete set null;
+
+create or replace function public.apps_script_finish_outbox(
+  p_secret text,p_id bigint,p_success boolean,p_error text default null
+) returns void language plpgsql security definer set search_path=public as $$
+begin
+  if not public.integration_secret_valid(p_secret) then raise exception 'Credencial inválida'; end if;
+  if p_success then
+    update public.email_outbox set status='sent',sent_at=coalesce(sent_at,now()),last_error=null
+    where id=p_id and status<>'sent';
+  else
+    update public.email_outbox set
+      status=case when attempts>=5 then 'failed' else 'pending' end,
+      available_at=now()+interval '30 minutes',
+      last_error=left(coalesce(p_error,'Erro desconhecido'),1000)
+    where id=p_id and status='processing';
+  end if;
+end $$;
+
+create or replace function public.retry_email_outbox(p_id bigint) returns void
+language plpgsql security definer set search_path=public as $$
+begin
+  if public.current_role()<>'tecnico' then raise exception 'Apenas técnicos podem reenviar notificações'; end if;
+  update public.email_outbox set status='pending',available_at=now(),claimed_at=null,
+    attempts=0,last_error=null,manual_retry_at=now(),manual_retry_by=auth.uid()
+  where id=p_id and (
+    status='failed' or
+    (status='pending' and available_at<now()-interval '5 minutes') or
+    (status='processing' and claimed_at<now()-interval '10 minutes')
+  );
+  if not found then raise exception 'A notificação não está disponível para reenvio'; end if;
+end $$;
+grant execute on function public.retry_email_outbox(bigint) to authenticated;
+
+create or replace function public.maintenance_metrics() returns jsonb
+language plpgsql security definer set search_path=public as $$
+declare m public.integration_runtime_metrics;
+begin
+  if public.current_role() not in ('tecnico','supervisor') then raise exception 'Acesso negado'; end if;
+  select * into m from public.integration_runtime_metrics where id=true;
+  return jsonb_build_object(
+    'database_bytes',pg_database_size(current_database()),
+    'attachment_bytes',coalesce((select sum(size_bytes) from public.attachments),0),
+    'attachment_count',(select count(*) from public.attachments),
+    'ticket_count',(select count(*) from public.tickets),
+    'outbox_pending',(select count(*) from public.email_outbox where status='pending'),
+    'outbox_processing',(select count(*) from public.email_outbox where status='processing'),
+    'outbox_failed',(select count(*) from public.email_outbox where status='failed'),
+    'outbox_overdue',(select count(*) from public.email_outbox where (status='pending' and available_at<now()-interval '5 minutes') or (status='processing' and claimed_at<now()-interval '10 minutes')),
+    'outbox_sent_today',(select count(*) from public.email_outbox where status='sent' and sent_at>=current_date),
+    'outbox_last_error',(select last_error from public.email_outbox where last_error is not null order by id desc limit 1),
+    'outbox_problems',coalesce((select jsonb_agg(to_jsonb(q)) from (
+      select o.id,o.recipient,o.event_type,o.status,o.attempts,o.available_at,o.last_error,
+             coalesce(t.protocol,r.protocol) protocol
+      from public.email_outbox o
+      left join public.tickets t on t.id=o.ticket_id
+      left join public.reservations r on r.id=o.reservation_id
+      where o.status='failed'
+         or (o.status='pending' and o.available_at<now()-interval '5 minutes')
+         or (o.status='processing' and o.claimed_at<now()-interval '10 minutes')
+      order by o.id desc limit 25
+    ) q),'[]'::jsonb),
+    'sent_today',m.sent_today,'sent_month',m.sent_month,'email_quota_remaining',m.email_quota_remaining,
+    'inbox_runs_today',m.inbox_runs_today,'outbox_runs_today',m.outbox_runs_today,
+    'last_inbox_run',m.last_inbox_run,'last_outbox_run',m.last_outbox_run,'updated_at',m.updated_at
+  );
+end $$;
+grant execute on function public.maintenance_metrics() to authenticated;
+
+-- Chamados originados no chat já nascem no estado final escolhido pelo técnico.
+-- Por isso devem gerar um único evento: conclusão ou permanência em atendimento.
+create or replace function public.queue_ticket_email() returns trigger
+language plpgsql security definer set search_path=public as $$
+declare v_email text; v_event text;
+begin
+  v_email:=public.ticket_email(new);
+  if v_email is null then return new; end if;
+  if tg_op='INSERT' then
+    if new.source='Chat' then
+      v_event:=case when new.status='Concluído' then 'concluido' else 'em_atendimento' end;
+    else
+      v_event:=case when new.source='Tecnico' then 'aberto_pelo_tecnico' else 'recebido' end;
+    end if;
+  elsif new.status is distinct from old.status and new.status='Em atendimento' then v_event:='em_atendimento';
+  elsif new.status is distinct from old.status and new.status='Concluído' then v_event:='concluido';
+  else return new;
+  end if;
+  insert into public.email_outbox(ticket_id,recipient,event_type,payload)
+  values(new.id,v_email,v_event,public.ticket_email_payload(new));
+  return new;
+end $$;
 
 -- -----------------------------------------------------------------------------
 -- migrations/20260826_chat_and_ticket_security_hardening.sql
@@ -3748,97 +3748,6 @@ with check(
 );
 
 -- -----------------------------------------------------------------------------
--- migrations/20260831_clear_closed_chat_history.sql
--- -----------------------------------------------------------------------------
-create or replace function public.clear_closed_chat_history()
-returns integer
-language plpgsql
-security definer
-set search_path = public, auth
-as $$
-declare
-  v_role text;
-  v_count integer;
-begin
-  select role into v_role from public.profiles where id=auth.uid() and active=true;
-  if v_role not in ('tecnico','supervisor') then raise exception 'Acesso não autorizado.'; end if;
-  delete from public.chat_sessions where status='closed';
-  get diagnostics v_count = row_count;
-  return v_count;
-end;
-$$;
-revoke all on function public.clear_closed_chat_history() from public, anon;
-grant execute on function public.clear_closed_chat_history() to authenticated;
-
--- -----------------------------------------------------------------------------
--- migrations/20260831_remove_reservation_operating_hours.sql
--- -----------------------------------------------------------------------------
--- Permite reservas em qualquer horário do dia, inclusive atravessando os
--- antigos intervalos entre os períodos matutino, vespertino e noturno.
--- Mantém as validações de dia, duração, precisão e conflito de agenda.
-create or replace function public.validate_reservation_slot(
-  p_start timestamptz,
-  p_end timestamptz
-)
-returns void
-language plpgsql
-stable
-set search_path=public
-as $$
-declare
-  s timestamp:=p_start at time zone 'America/Cuiaba';
-  e timestamp:=p_end at time zone 'America/Cuiaba';
-  duration_seconds integer:=extract(epoch from (p_end-p_start))::integer;
-begin
-  if extract(isodow from s) not between 1 and 6 or s::date<>e::date then
-    raise exception 'Reservas são permitidas de segunda a sábado e devem começar e terminar na mesma data.';
-  end if;
-  if duration_seconds<2400 or duration_seconds>21600 then
-    raise exception 'A reserva deve ter entre 40 minutos e 6 horas.';
-  end if;
-  if extract(minute from s)::integer%5<>0 or extract(minute from e)::integer%5<>0 then
-    raise exception 'Informe início e fim em intervalos de 5 minutos.';
-  end if;
-end;
-$$;
-
--- -----------------------------------------------------------------------------
--- migrations/20260831_reservation_cancel_scope.sql
--- -----------------------------------------------------------------------------
--- Corrige o cancelamento de reservas para respeitar o escopo (ocorrência ou série)
-
-create or replace function public.staff_cancel_reservation_notification(
-  p_id uuid, p_reason text, p_notify boolean default true, p_scope text default 'occurrence'
-)
-returns public.reservations language plpgsql security definer set search_path=public as $$
-declare
-  base public.reservations; result public.reservations; recipient text;
-begin
-  if public.current_role() not in ('tecnico','supervisor') then raise exception 'Acesso negado.'; end if;
-  if length(btrim(coalesce(p_reason,'')))<3 then raise exception 'Informe o motivo do cancelamento.'; end if;
-  select * into base from public.reservations where id=p_id for update;
-  if base.id is null then raise exception 'Reserva não encontrada.'; end if;
-  
-  update public.reservations set
-    status='Cancelada',cancelled_at=now(),cancellation_reason=btrim(p_reason),updated_at=now()
-  where id=base.id or (p_scope='series' and base.recurrence_group is not null and recurrence_group=base.recurrence_group);
-  
-  select * into result from public.reservations where id=p_id;
-  
-  if coalesce(p_notify,true) then
-    select lower(email) into recipient from public.servers where id=result.server_id and active;
-    if recipient is not null then
-      insert into public.email_outbox(reservation_id,recipient,event_type,payload)
-      values(result.id,recipient,'reserva_cancelada',public.reservation_payload(result));
-    end if;
-  end if;
-  return result;
-end $$;
-
-revoke all on function public.staff_cancel_reservation_notification(uuid,text,boolean) from public;
-grant execute on function public.staff_cancel_reservation_notification(uuid,text,boolean,text) to authenticated;
-
--- -----------------------------------------------------------------------------
 -- migrations/20260831_reservation_cleanup.sql
 -- -----------------------------------------------------------------------------
 -- Limpeza oportunista de reservas expiradas
@@ -4243,6 +4152,74 @@ end $$;
 grant execute on function public.staff_reservation_history_page(text,integer,integer) to authenticated;
 
 -- -----------------------------------------------------------------------------
+-- migrations/20260831_reservation_cancel_scope.sql
+-- -----------------------------------------------------------------------------
+-- Corrige o cancelamento de reservas para respeitar o escopo (ocorrência ou série)
+
+create or replace function public.staff_cancel_reservation_notification(
+  p_id uuid, p_reason text, p_notify boolean default true, p_scope text default 'occurrence'
+)
+returns public.reservations language plpgsql security definer set search_path=public as $$
+declare
+  base public.reservations; result public.reservations; recipient text;
+begin
+  if public.current_role() not in ('tecnico','supervisor') then raise exception 'Acesso negado.'; end if;
+  if length(btrim(coalesce(p_reason,'')))<3 then raise exception 'Informe o motivo do cancelamento.'; end if;
+  select * into base from public.reservations where id=p_id for update;
+  if base.id is null then raise exception 'Reserva não encontrada.'; end if;
+  
+  update public.reservations set
+    status='Cancelada',cancelled_at=now(),cancellation_reason=btrim(p_reason),updated_at=now()
+  where id=base.id or (p_scope='series' and base.recurrence_group is not null and recurrence_group=base.recurrence_group);
+  
+  select * into result from public.reservations where id=p_id;
+  
+  if coalesce(p_notify,true) then
+    select lower(email) into recipient from public.servers where id=result.server_id and active;
+    if recipient is not null then
+      insert into public.email_outbox(reservation_id,recipient,event_type,payload)
+      values(result.id,recipient,'reserva_cancelada',public.reservation_payload(result));
+    end if;
+  end if;
+  return result;
+end $$;
+
+revoke all on function public.staff_cancel_reservation_notification(uuid,text,boolean) from public;
+grant execute on function public.staff_cancel_reservation_notification(uuid,text,boolean,text) to authenticated;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260831_remove_reservation_operating_hours.sql
+-- -----------------------------------------------------------------------------
+-- Permite reservas em qualquer horário do dia, inclusive atravessando os
+-- antigos intervalos entre os períodos matutino, vespertino e noturno.
+-- Mantém as validações de dia, duração, precisão e conflito de agenda.
+create or replace function public.validate_reservation_slot(
+  p_start timestamptz,
+  p_end timestamptz
+)
+returns void
+language plpgsql
+stable
+set search_path=public
+as $$
+declare
+  s timestamp:=p_start at time zone 'America/Cuiaba';
+  e timestamp:=p_end at time zone 'America/Cuiaba';
+  duration_seconds integer:=extract(epoch from (p_end-p_start))::integer;
+begin
+  if extract(isodow from s) not between 1 and 6 or s::date<>e::date then
+    raise exception 'Reservas são permitidas de segunda a sábado e devem começar e terminar na mesma data.';
+  end if;
+  if duration_seconds<2400 or duration_seconds>21600 then
+    raise exception 'A reserva deve ter entre 40 minutos e 6 horas.';
+  end if;
+  if extract(minute from s)::integer%5<>0 or extract(minute from e)::integer%5<>0 then
+    raise exception 'Informe início e fim em intervalos de 5 minutos.';
+  end if;
+end;
+$$;
+
+-- -----------------------------------------------------------------------------
 -- migrations/20260831_staff_upsert_server.sql
 -- -----------------------------------------------------------------------------
 create or replace function public.staff_upsert_server(
@@ -4298,102 +4275,27 @@ revoke all on function public.staff_upsert_server(text,text,text) from public, a
 grant execute on function public.staff_upsert_server(text,text,text) to authenticated;
 
 -- -----------------------------------------------------------------------------
--- migrations/20260901_direct_ticket_completion_and_reservation_cancel.sql
+-- migrations/20260831_clear_closed_chat_history.sql
 -- -----------------------------------------------------------------------------
--- Conclusão direta de chamados e cancelamento seguro pelo e-mail de confirmação.
-
-alter table public.reservations
-  add column if not exists cancellation_token uuid default gen_random_uuid();
-
-update public.reservations
-set cancellation_token=gen_random_uuid()
-where cancellation_token is null;
-
-alter table public.reservations
-  alter column cancellation_token set default gen_random_uuid(),
-  alter column cancellation_token set not null;
-
-create unique index if not exists reservations_cancellation_token_key
-  on public.reservations(cancellation_token);
-
-create or replace function public.reservation_payload(r public.reservations) returns jsonb
-language sql stable security definer set search_path=public as $$
- select jsonb_build_object(
-   'protocol',r.protocol,'reservation_id',r.id,'server_name',s.full_name,
-   'title',r.subject,'lab',l.name,'starts_at',r.starts_at,'ends_at',r.ends_at,
-   'status',r.status,'reason',r.cancellation_reason,
-   'portal_url','https://labinfo.tl.ifms.edu.br/reservas/',
-   'confirmation_url','https://labinfo.tl.ifms.edu.br/reservas/?confirm_reservation='||r.confirmation_token::text,
-   'cancellation_url','https://labinfo.tl.ifms.edu.br/reservas/?cancel_reservation='||r.cancellation_token::text
- )
- from public.servers s join public.labs l on l.id=r.lab_id where s.id=r.server_id
+create or replace function public.clear_closed_chat_history()
+returns integer
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  v_role text;
+  v_count integer;
+begin
+  select role into v_role from public.profiles where id=auth.uid() and active=true;
+  if v_role not in ('tecnico','supervisor') then raise exception 'Acesso não autorizado.'; end if;
+  delete from public.chat_sessions where status='closed';
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
 $$;
-
-create or replace function public.cancel_reservation_from_email(p_token uuid)
-returns table(protocol text,status text,cancelled_count integer)
-language plpgsql security definer set search_path=public as $$
-declare r public.reservations; affected integer:=0;
-begin
-  select reservation.* into r
-  from public.reservations reservation
-  where reservation.cancellation_token=p_token
-  order by reservation.starts_at limit 1 for update;
-
-  if r.id is null then raise exception 'Link de cancelamento inválido.'; end if;
-  if r.status='Cancelada' then
-    return query select r.protocol,r.status::text,0;
-    return;
-  end if;
-  if r.status<>'Aguardando confirmação' or r.confirmed_at is not null then
-    raise exception 'Esta solicitação já foi confirmada e não pode mais ser cancelada por este link.';
-  end if;
-
-  update public.reservations reservation set
-    status='Cancelada',
-    cancellation_reason='Cancelada pelo servidor através do e-mail de confirmação.',
-    updated_at=now()
-  where reservation.recurrence_group=r.recurrence_group
-    and reservation.status='Aguardando confirmação';
-  get diagnostics affected=row_count;
-
-  return query select r.protocol,'Cancelada'::text,affected;
-end $$;
-
-revoke all on function public.cancel_reservation_from_email(uuid) from public;
-grant execute on function public.cancel_reservation_from_email(uuid) to anon,authenticated;
-
-create or replace function public.staff_complete_ticket(
-  p_ticket uuid,p_resolution text,p_direct boolean default false
-) returns jsonb
-language plpgsql security definer set search_path=public as $$
-declare t public.tickets; actor uuid:=auth.uid(); closed_time timestamptz:=now();
-begin
-  if actor is null or public.current_role()<>'tecnico' then raise exception 'Acesso negado.'; end if;
-  if length(btrim(coalesce(p_resolution,'')))<5 then raise exception 'Descreva a solução realizada.'; end if;
-
-  select * into t from public.tickets where id=p_ticket for update;
-  if t.id is null or t.deleted_at is not null then raise exception 'Chamado não localizado.'; end if;
-  if t.status='Concluído' then raise exception 'Este chamado já foi concluído.'; end if;
-  if t.category_id is null then raise exception 'Informe a categoria antes de concluir o chamado.'; end if;
-
-  insert into public.ticket_assignees(ticket_id,profile_id,assigned_by)
-  values(t.id,actor,actor)
-  on conflict(ticket_id,profile_id) do nothing;
-
-  update public.tickets set
-    assigned_to=coalesce(assigned_to,actor),status='Concluído',
-    resolution=btrim(p_resolution),started_at=coalesce(started_at,closed_time),
-    closed_at=closed_time,server_reply_pending=false,updated_at=closed_time
-  where id=t.id;
-
-  insert into public.ticket_updates(ticket_id,author_id,message,kind)
-  values(t.id,actor,btrim(p_resolution),'fechamento');
-
-  return jsonb_build_object('protocol',t.protocol,'status','Concluído','direct',coalesce(p_direct,false));
-end $$;
-
-revoke all on function public.staff_complete_ticket(uuid,text,boolean) from public;
-grant execute on function public.staff_complete_ticket(uuid,text,boolean) to authenticated;
+revoke all on function public.clear_closed_chat_history() from public, anon;
+grant execute on function public.clear_closed_chat_history() to authenticated;
 
 -- -----------------------------------------------------------------------------
 -- migrations/20260901_public_reservation_cancellation_requests.sql
@@ -4647,6 +4549,104 @@ grant execute on function public.staff_review_reservation_cancellation(uuid,bool
 do $$ begin
   alter publication supabase_realtime add table public.reservation_cancellation_requests;
 exception when duplicate_object then null; end $$;
+
+-- -----------------------------------------------------------------------------
+-- migrations/20260901_direct_ticket_completion_and_reservation_cancel.sql
+-- -----------------------------------------------------------------------------
+-- Conclusão direta de chamados e cancelamento seguro pelo e-mail de confirmação.
+
+alter table public.reservations
+  add column if not exists cancellation_token uuid default gen_random_uuid();
+
+update public.reservations
+set cancellation_token=gen_random_uuid()
+where cancellation_token is null;
+
+alter table public.reservations
+  alter column cancellation_token set default gen_random_uuid(),
+  alter column cancellation_token set not null;
+
+create unique index if not exists reservations_cancellation_token_key
+  on public.reservations(cancellation_token);
+
+create or replace function public.reservation_payload(r public.reservations) returns jsonb
+language sql stable security definer set search_path=public as $$
+ select jsonb_build_object(
+   'protocol',r.protocol,'reservation_id',r.id,'server_name',s.full_name,
+   'title',r.subject,'lab',l.name,'starts_at',r.starts_at,'ends_at',r.ends_at,
+   'status',r.status,'reason',r.cancellation_reason,
+   'portal_url','https://labinfo.tl.ifms.edu.br/reservas/',
+   'confirmation_url','https://labinfo.tl.ifms.edu.br/reservas/?confirm_reservation='||r.confirmation_token::text,
+   'cancellation_url','https://labinfo.tl.ifms.edu.br/reservas/?cancel_reservation='||r.cancellation_token::text
+ )
+ from public.servers s join public.labs l on l.id=r.lab_id where s.id=r.server_id
+$$;
+
+create or replace function public.cancel_reservation_from_email(p_token uuid)
+returns table(protocol text,status text,cancelled_count integer)
+language plpgsql security definer set search_path=public as $$
+declare r public.reservations; affected integer:=0;
+begin
+  select reservation.* into r
+  from public.reservations reservation
+  where reservation.cancellation_token=p_token
+  order by reservation.starts_at limit 1 for update;
+
+  if r.id is null then raise exception 'Link de cancelamento inválido.'; end if;
+  if r.status='Cancelada' then
+    return query select r.protocol,r.status::text,0;
+    return;
+  end if;
+  if r.status<>'Aguardando confirmação' or r.confirmed_at is not null then
+    raise exception 'Esta solicitação já foi confirmada e não pode mais ser cancelada por este link.';
+  end if;
+
+  update public.reservations reservation set
+    status='Cancelada',
+    cancellation_reason='Cancelada pelo servidor através do e-mail de confirmação.',
+    updated_at=now()
+  where reservation.recurrence_group=r.recurrence_group
+    and reservation.status='Aguardando confirmação';
+  get diagnostics affected=row_count;
+
+  return query select r.protocol,'Cancelada'::text,affected;
+end $$;
+
+revoke all on function public.cancel_reservation_from_email(uuid) from public;
+grant execute on function public.cancel_reservation_from_email(uuid) to anon,authenticated;
+
+create or replace function public.staff_complete_ticket(
+  p_ticket uuid,p_resolution text,p_direct boolean default false
+) returns jsonb
+language plpgsql security definer set search_path=public as $$
+declare t public.tickets; actor uuid:=auth.uid(); closed_time timestamptz:=now();
+begin
+  if actor is null or public.current_role()<>'tecnico' then raise exception 'Acesso negado.'; end if;
+  if length(btrim(coalesce(p_resolution,'')))<5 then raise exception 'Descreva a solução realizada.'; end if;
+
+  select * into t from public.tickets where id=p_ticket for update;
+  if t.id is null or t.deleted_at is not null then raise exception 'Chamado não localizado.'; end if;
+  if t.status='Concluído' then raise exception 'Este chamado já foi concluído.'; end if;
+  if t.category_id is null then raise exception 'Informe a categoria antes de concluir o chamado.'; end if;
+
+  insert into public.ticket_assignees(ticket_id,profile_id,assigned_by)
+  values(t.id,actor,actor)
+  on conflict(ticket_id,profile_id) do nothing;
+
+  update public.tickets set
+    assigned_to=coalesce(assigned_to,actor),status='Concluído',
+    resolution=btrim(p_resolution),started_at=coalesce(started_at,closed_time),
+    closed_at=closed_time,server_reply_pending=false,updated_at=closed_time
+  where id=t.id;
+
+  insert into public.ticket_updates(ticket_id,author_id,message,kind)
+  values(t.id,actor,btrim(p_resolution),'fechamento');
+
+  return jsonb_build_object('protocol',t.protocol,'status','Concluído','direct',coalesce(p_direct,false));
+end $$;
+
+revoke all on function public.staff_complete_ticket(uuid,text,boolean) from public;
+grant execute on function public.staff_complete_ticket(uuid,text,boolean) to authenticated;
 
 -- -----------------------------------------------------------------------------
 -- migrations/20260901_staff_series_atomic_conflict_check.sql
