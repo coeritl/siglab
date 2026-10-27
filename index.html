@@ -7,8 +7,8 @@
     <meta name="description" content="SIGLAB — consulta e gestão integrada das reservas de laboratórios do IFMS Campus Três Lagoas.">
     <title>SIGLAB | Gestão de Laboratórios</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="stylesheet" href="styles.css?v=3d78a93c00">
-    <link rel="stylesheet" href="siglab.css?v=7b5ff13aaa">
+    <link rel="stylesheet" href="styles.css?v=b39c190e51">
+    <link rel="stylesheet" href="siglab.css?v=41977cb761">
   </head>
   <body>
     <header class="topbar siglab-topbar">
@@ -91,6 +91,17 @@
 
         <button id="togglePublicReservationForm" class="card reservation-form-toggle" type="button" aria-expanded="false"><span><i>+</i><span><strong>Fazer uma reserva</strong><small>Informe o laboratório, a data e o horário desejados</small></span></span><b>Expandir ↓</b></button>
 
+        <button id="toggleMyReservationsForm" class="card reservation-form-toggle" type="button" aria-expanded="false" aria-controls="myReservationsSide"><span><i aria-hidden="true"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></i><span><strong>Minhas reservas</strong><small>Consulte o status ou solicite um cancelamento</small></span></span><b>Expandir ↓</b></button>
+        <aside id="myReservationsSide" class="reservation-side" hidden>
+          <section class="card my-reservations highlight-box">
+            <span class="eyebrow">GERENCIAR OU CANCELAR</span>
+            <h2>Minhas reservas</h2>
+            <p>Informe seu SIAPE para receber no e-mail institucional um link seguro para consultar suas reservas e solicitar cancelamentos.</p>
+            <div class="protocol-search"><input id="reservationSearchSiape" inputmode="numeric" autocomplete="off" placeholder="Digite seu SIAPE" aria-label="Seu SIAPE"><button id="searchReservations" type="button">Enviar link</button></div>
+            <div id="myReservationsResult"></div>
+          </section>
+        </aside>
+
         <div class="reservation-public-grid">
           <form id="publicReservationForm" class="card reservation-form" hidden>
             <div class="section-title"><span>1</span><div><h2>Identificação</h2><p>Somente servidores cadastrados podem solicitar</p></div></div>
@@ -105,9 +116,6 @@
             <label>Observações <small>(opcional)</small><textarea id="reservationNotes" rows="3" maxlength="500" placeholder="Turma, software necessário ou outra informação relevante"></textarea></label>
             <button class="primary" type="submit">Solicitar reserva</button>
           </form>
-          <aside class="reservation-side">
-            <section class="card my-reservations"><h2>Minhas reservas</h2><p>Receba no e-mail institucional um link seguro para consultar reservas futuras e solicitar cancelamentos.</p><div class="protocol-search"><input id="reservationSearchSiape" inputmode="numeric" autocomplete="off" placeholder="Digite seu SIAPE"><button id="searchReservations" type="button">Enviar link</button></div><div id="myReservationsResult"></div></section>
-          </aside>
         </div>
       </section>
 
@@ -132,8 +140,8 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <footer><span>SIGLAB — Sistema Integrado de Gestão de Laboratórios</span><small>IFMS Campus Três Lagoas</small></footer>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-config.js?v=d010cf8680"></script>
-    <script src="siglab-app.js?v=ba7e657d47"></script>
-    <script src="reservations.js?v=228c5a2569"></script>
+    <script src="supabase-config.js?v=f02441441c"></script>
+    <script src="siglab-app.js?v=adc7317fec"></script>
+    <script src="reservations.js?v=4d8849d35b"></script>
   </body>
 </html>

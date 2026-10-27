@@ -4,6 +4,21 @@
   --siglab-ink: #17211b;
 }
 
+.reservations-public-view #toggleMyReservationsForm { order: 3; margin: 0 0 14px; }
+.reservations-public-view #myReservationsSide { order: 3; margin: 0 0 14px; }
+#myReservationsSide[hidden] { display: none; }
+#myReservationsSide .highlight-box { border-left: 5px solid var(--green); background: #f3f9f5; }
+#myReservationsSide h2 { margin: 4px 0 8px; }
+#myReservationsSide p { margin: 0 0 16px; font-size: 13.5px; line-height: 1.5; }
+#myReservationsSide .protocol-search { margin-top: 16px; }
+@media(max-width:620px) {
+  #toggleMyReservationsForm { gap: 10px; padding: 16px; }
+  #toggleMyReservationsForm > span { min-width: 0; }
+  #toggleMyReservationsForm small { white-space: normal; }
+  #toggleMyReservationsForm b { flex-shrink: 0; }
+  #myReservationsSide .my-reservations { padding: 20px 16px; }
+}
+
 body:has(#homeView:not([hidden])) .siglab-topbar { display: none; }
 .siglab-google-login {
   display: flex;
