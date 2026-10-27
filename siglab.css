@@ -21,42 +21,12 @@ body:has(#homeView:not([hidden])) .topbar .siglab-brand {
   height: 44px;
 }
 
-.siglab-wordmark,
-.siglab-home-wordmark {
-  position: relative;
-  display: inline-flex;
-  align-items: baseline;
-  width: max-content;
-  color: #07812f;
-  font-style: normal;
-  line-height: 1;
-  letter-spacing: -2.8px;
-}
-
-.siglab-wordmark strong,
-.siglab-home-wordmark strong {
-  font-size: 35px;
-  font-weight: 950;
-}
-
-.siglab-wordmark b,
-.siglab-home-wordmark b {
-  color: #07812f;
-  font-size: 23px;
-  font-weight: 950;
-  letter-spacing: -1.5px;
-}
-
-.siglab-wordmark i,
-.siglab-home-wordmark i {
-  position: absolute;
-  top: -2px;
-  left: 46px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #df1822;
-  box-shadow: 0 0 0 2px #fff;
+.siglab-header-logo {
+  display: block;
+  width: 220px;
+  height: auto;
+  max-height: 40px;
+  object-fit: contain;
 }
 
 .siglab-brand .brand-system-name {
@@ -160,26 +130,12 @@ body:has(#homeView:not([hidden]))::before {
   text-align: center;
 }
 
-.siglab-home-wordmark {
-  display: flex;
-  margin: 0 auto 20px;
-}
-
-.siglab-home-wordmark strong {
-  font-size: clamp(52px, 8vw, 74px);
-  letter-spacing: -5px;
-}
-
-.siglab-home-wordmark b {
-  font-size: clamp(32px, 5vw, 45px);
-  letter-spacing: -3px;
-}
-
-.siglab-home-wordmark i {
-  top: -2px;
-  left: clamp(68px, 9.8vw, 99px);
-  width: 11px;
-  height: 11px;
+.siglab-home-logo {
+  display: block;
+  width: min(540px, 84vw);
+  height: auto;
+  margin: 0 auto 22px;
+  object-fit: contain;
 }
 
 .siglab-hero h1 {
@@ -401,17 +357,12 @@ body > footer small { opacity: .72; }
 
 @media (max-width: 620px) {
   .siglab-topbar { height: 64px; padding: 0 14px; }
-  .siglab-wordmark strong { font-size: 27px; letter-spacing: -2px; }
-  .siglab-wordmark b { font-size: 18px; }
-  .siglab-wordmark i { left: 36px; width: 6px; height: 6px; }
+  .siglab-header-logo { width: 164px; max-height: 32px; }
   .siglab-brand .brand-system-name { padding-left: 8px; font-size: 8px; letter-spacing: 1px; }
   .siglab-public-nav > button:first-child { display: none; }
   .siglab-public-nav .admin-link { min-height: 38px; padding: 6px 9px; font-size: 10px; }
   .siglab-home { padding-top: 28px; }
-  .siglab-home-wordmark { margin-bottom: 15px; }
-  .siglab-home-wordmark strong { font-size: 50px; letter-spacing: -4px; }
-  .siglab-home-wordmark b { font-size: 31px; }
-  .siglab-home-wordmark i { left: 67px; width: 9px; height: 9px; }
+  .siglab-home-logo { width: min(460px, 91vw); margin-bottom: 16px; }
   .siglab-hero { margin-bottom: 22px; }
   .siglab-hero h1 { padding: 8px 20px; border-radius: 18px; font-size: 26px; }
   .siglab-hero p { font-size: 15px; }
