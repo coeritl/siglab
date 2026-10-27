@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" fill="none">
+  <defs>
+    <pattern id="stripes" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(52)">
+      <rect width="8" height="22" fill="#52695b" opacity=".045"/>
+    </pattern>
+    <linearGradient id="wash" x1="0" y1="0" x2="1600" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".55" stop-color="#fff" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".15"/>
+    </linearGradient>
+  </defs>
+  <path d="M0 0H170L430 1000H0Z" fill="url(#stripes)"/>
+  <path fill="url(#stripes)" opacity=".25" d="M0 0H1600V1000H0Z"/>
+  <g fill="#39a34c" transform="rotate(-15 800 500)">
+    <rect x="60" y="105" width="82" height="82" rx="18" opacity=".12"/>
+    <rect x="200" y="55" width="108" height="108" rx="24" opacity=".17"/>
+    <rect x="340" y="105" width="165" height="165" rx="34" opacity=".075"/>
+    <rect x="-30" y="230" width="220" height="220" rx="45" opacity=".14"/>
+    <rect x="-160" y="460" width="180" height="180" rx="35" opacity=".13"/>
+    <rect x="65" y="520" width="90" height="90" rx="20" opacity=".14"/>
+    <rect x="195" y="540" width="150" height="150" rx="30" opacity=".12"/>
+    <rect x="-65" y="705" width="110" height="110" rx="24" opacity=".15"/>
+    <rect x="300" y="735" width="48" height="48" rx="11" opacity=".12"/>
+    <rect x="1330" y="40" width="230" height="230" rx="48" opacity=".08"/>
+    <rect x="1220" y="285" width="96" height="96" rx="22" opacity=".075"/>
+    <rect x="1450" y="710" width="165" height="165" rx="34" opacity=".07"/>
+  </g>
+  <path fill="url(#wash)" d="M0 0H1600V1000H0Z"/>
+</svg>
