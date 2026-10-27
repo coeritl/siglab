@@ -4,6 +4,34 @@
   --siglab-ink: #17211b;
 }
 
+body:has(#homeView:not([hidden])) .siglab-topbar { display: none; }
+.siglab-google-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  max-width: 100%;
+  margin: 0 auto 30px;
+  padding: 12px 20px;
+  border: 1px solid var(--green);
+  border-radius: 10px;
+  background: var(--green);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(17,115,60,.15);
+}
+.siglab-google-login:hover { background: var(--green-dark); }
+.siglab-google-login:disabled { opacity: .65; cursor: wait; }
+.siglab-google-login > span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 5px; background: #fff; color: #4285f4; font-size: 21px; font-weight: 800; }
+.siglab-service-grid .service-choice { min-height: 210px !important; text-align: center; }
+.siglab-service-grid .service-choice-icon { margin: 0 auto 20px; }
+.siglab-service-grid .service-choice strong { margin: 0; font-size: 23px; }
+@media(max-width:620px) {
+  .siglab-google-login { padding: 11px 13px; font-size: 13px; }
+  .siglab-service-grid .service-choice { min-height: 160px !important; }
+}
+
 /* A identidade do SIGLAB segue a mesma família visual do LabInfo. */
 .siglab-topbar,
 body:has(#homeView:not([hidden])) .siglab-topbar {

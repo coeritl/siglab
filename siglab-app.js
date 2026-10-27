@@ -48,6 +48,28 @@
   $('#headerScheduleButton').onclick = () => openReservations('all');
   $('#homeAdminButton')?.addEventListener('click', () => requestAdmin());
   $('#adminToggle').onclick = () => requestAdmin();
+  $('#homeGoogleLogin').onclick = async () => {
+    const button = $('#homeGoogleLogin');
+    const notice = $('#homeLoginError');
+    notice.hidden = true;
+    button.disabled = true;
+    try {
+      if (!sb) throw new Error('Login institucional indisponível no momento.');
+      const { error } = await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: new URL(sitePath(''), location.origin).href,
+          queryParams: { hd: 'ifms.edu.br', prompt: 'select_account' }
+        }
+      });
+      if (error) throw error;
+    } catch (error) {
+      notice.textContent = 'Não foi possível iniciar o login Google IFMS. Verifique a configuração do provedor no Supabase.';
+      notice.hidden = false;
+    } finally {
+      button.disabled = false;
+    }
+  };
   $('.siglab-brand').onclick = event => {
     event.preventDefault();
     if ($('#adminView').hidden) setPublicView('home');

@@ -17,11 +17,11 @@ test('a página inicial separa Informática, Eletrotécnica e laboratórios dive
   const [html, reservations] = await Promise.all([read('index.html'), read('reservations.js')]);
   assert.match(html, /id="openReservations"/);
   assert.match(html, /href="https:\/\/labinfo\.tl\.ifms\.edu\.br\/reservas\/"/);
-  assert.match(html, /LABORATÓRIOS DE INFORMÁTICA/);
+  assert.match(html, /Reservar Laboratórios de Informática/);
   assert.match(html, /data-reservation-group="eletrotecnica"/);
-  assert.match(html, /LABORATÓRIOS DE ELETROTÉCNICA/);
+  assert.match(html, /Reservar Laboratórios de Eletrotécnica/);
   assert.match(html, /data-reservation-group="diversos"/);
-  assert.match(html, /LABORATÓRIOS DIVERSOS/);
+  assert.match(html, /Reservar os demais laboratórios/);
   assert.match(reservations, /publicLabMatchesGroup/);
   assert.match(reservations, /sectors\(name,slug,reservation_mode\)/);
 });
