@@ -58,6 +58,7 @@ const migrationNames = [
   '20260903_chat_online_reminders_and_waiting_email.sql',
   '20261026_siglab_multisector_google_reservations.sql',
   '20261027_siglab_temporary_test_auth.sql',
+  '20261027_fix_staff_profile_ambiguity.sql',
 ];
 
 const discoveredMigrations = (await readdir(migrationDir))

@@ -13,6 +13,12 @@
   const adminRouteSlug=requestedRoute==='admin'?'reservas':requestedRoute.startsWith('admin/')?requestedRoute.slice(6):'';
   const validAdminRouteSlugs=new Set(['chamados','relatorios','reservas','chat','cadastros','supervisor','horarios','manutencao']);
   const isAdminRoute=validAdminRouteSlugs.has(adminRouteSlug);
+  const isCurrentAdminRoute=()=>{
+    const currentParam=new URLSearchParams(location.search).get('route');
+    const currentRoute=currentParam||location.pathname.slice(siteBase.length).replace(/^\/+|\/+$/g,'');
+    const currentSlug=currentRoute==='admin'?'reservas':currentRoute.startsWith('admin/')?currentRoute.slice(6):'';
+    return validAdminRouteSlugs.has(currentSlug);
+  };
   const isSupportRoute=requestedRoute==='suporte'||Boolean(feedbackParam);
   if(routeParam&&!feedbackParam)window.addEventListener('load',()=>history.replaceState({},'',sitePath(requestedRoute)),{once:true});
   if(isAdminRoute){document.body.classList.add('admin-route');$('#homeView').hidden=true;$('#teacherView').hidden=true;$('#reservationsPublicView').hidden=true;const cp=$('#chatPublicView');if(cp)cp.hidden=true}
@@ -2185,8 +2191,9 @@
   loadChatAvailability();
   confirmFeedbackFromLink();
   window.addEventListener('siglab:institutional-auth',event=>{
-    if(isAdminRoute&&event.detail?.staff&&!state.profile)enterAdmin().then(startAdminSynchronization);
-    if(isAdminRoute&&event.detail?.session&&!event.detail?.staff){
+    const onAdminRoute=isCurrentAdminRoute();
+    if(onAdminRoute&&event.detail?.staff&&!state.profile)enterAdmin().then(startAdminSynchronization);
+    if(onAdminRoute&&event.detail?.session&&!event.detail?.staff){
       openLogin();$('#loginError').textContent='Esta conta institucional não está cadastrada como técnico do SIGLAB.';
     }
   });
