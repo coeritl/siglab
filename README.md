@@ -26,9 +26,12 @@ Os scripts de chamados e chat não são carregados pela aplicação.
 
 ## Banco de dados
 
-O `supabase-config.js` permanece deliberadamente vazio. Nunca reutilize neste repositório a URL, a chave pública ou os segredos do LabInfo em produção.
+O `supabase-config.js` aponta para o projeto Supabase exclusivo do SIGLAB. A
+chave publicada é a chave pública do projeto; segredos administrativos não são
+armazenados no site. Nunca reutilize neste repositório a URL, a chave pública ou
+os segredos do LabInfo em produção.
 
-A próxima etapa é criar um projeto Supabase exclusivo do SIGLAB e consolidar somente as tabelas, políticas e funções relacionadas a:
+O banco exclusivo mantém somente os dados necessários ao SIGLAB:
 
 - `profiles`;
 - `servers`;
@@ -38,7 +41,8 @@ A próxima etapa é criar um projeto Supabase exclusivo do SIGLAB e consolidar s
 - `system_settings`;
 - fila de notificações de reserva.
 
-Enquanto o banco exclusivo não for configurado, o Pages funciona em modo de demonstração e exibe espaços ilustrativos sem permitir gravações.
+Durante a homologação, a área interna usa usuários temporários por e-mail e
+senha. O Google OAuth institucional será ativado posteriormente.
 
 ## Desenvolvimento
 

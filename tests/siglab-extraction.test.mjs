@@ -25,9 +25,10 @@ test('as rotas do GitHub Pages usam a base independente /siglab', async () => {
   assert.doesNotMatch(`${app}\n${reservations}\n${notFound}`, /\?\s*'\/labinfo'\s*:\s*''/);
 });
 
-test('a configuração publicada não aponta para o Supabase do LabInfo', async () => {
+test('a configuração publicada aponta somente para o Supabase exclusivo do SIGLAB', async () => {
   const config = await read('supabase-config.js');
-  assert.match(config, /url:\s*""/);
-  assert.match(config, /anonKey:\s*""/);
-  assert.doesNotMatch(config, /jvoeaqiusjivyofbyzvi|supabase\.co/);
+  assert.match(config, /window\.SIGLAB_SUPABASE/);
+  assert.match(config, /keesciertyonbfqlrqwt\.supabase\.co/);
+  assert.match(config, /sb_publishable_m5L9IkzHlYIuwsbcwJ80Hg_B_4QGGXz/);
+  assert.doesNotMatch(config, /jvoeaqiusjivyofbyzvi/);
 });
