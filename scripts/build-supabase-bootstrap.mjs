@@ -4,9 +4,22 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const migrationDir = join(root, 'supabase', 'migrations');
+const migrationOrderOverrides = new Map([
+  // pending_servers cria guest_siape/guest_email; multiple_assignees já usa
+  // essas colunas ao substituir my_tickets().
+  ['20260812_pending_servers.sql', 1],
+  ['20260812_multiple_assignees.sql', 2],
+]);
 const migrationNames = (await readdir(migrationDir))
   .filter((name) => name.endsWith('.sql'))
-  .sort((a, b) => a.localeCompare(b));
+  .sort((a, b) => {
+    const aPrefix = a.slice(0, 8);
+    const bPrefix = b.slice(0, 8);
+    if (aPrefix !== bPrefix) return a.localeCompare(b);
+    const aOverride = migrationOrderOverrides.get(a) ?? 100;
+    const bOverride = migrationOrderOverrides.get(b) ?? 100;
+    return aOverride - bOverride || a.localeCompare(b);
+  });
 
 const sources = [
   ['schema.sql', await readFile(join(root, 'supabase', 'schema.sql'), 'utf8')],
