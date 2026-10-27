@@ -2,5 +2,7 @@
 // Nunca reutilize as chaves do LabInfo em produção.
 window.SIGLAB_SUPABASE = {
   url: "https://keesciertyonbfqlrqwt.supabase.co",
-  anonKey: "sb_publishable_m5L9IkzHlYIuwsbcwJ80Hg_B_4QGGXz"
+  anonKey: "sb_publishable_m5L9IkzHlYIuwsbcwJ80Hg_B_4QGGXz",
+  // Temporário para homologação. Remover ao ativar o Google OAuth institucional.
+  testAuthEnabled: true
 };

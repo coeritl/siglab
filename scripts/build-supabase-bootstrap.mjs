@@ -57,6 +57,7 @@ const migrationNames = [
   '20260901_staff_series_atomic_conflict_check.sql',
   '20260903_chat_online_reminders_and_waiting_email.sql',
   '20261026_siglab_multisector_google_reservations.sql',
+  '20261027_siglab_temporary_test_auth.sql',
 ];
 
 const discoveredMigrations = (await readdir(migrationDir))

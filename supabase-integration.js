@@ -66,7 +66,8 @@
     }
   }
 
-  document.body.insertAdjacentHTML('beforeend',`<div id="loginModal" class="modal-backdrop" hidden><div class="card login-card"><div class="modal-heading"><div><span class="eyebrow">ÁREA INTERNA DO SIGLAB</span><h2>Entrar com a conta IFMS</h2><p>O acesso é liberado somente para técnicos ativos e vinculados a um setor.</p></div><button id="closeLogin" class="modal-close">×</button></div><form id="loginForm"><p id="loginError" class="login-error"></p><button class="google-auth-button" type="submit"><span aria-hidden="true">G</span> Entrar com @ifms.edu.br</button></form></div></div>`);
+  const testAuth=window.siglabInstitutionalAuth?.testMode===true;
+  document.body.insertAdjacentHTML('beforeend',`<div id="loginModal" class="modal-backdrop" hidden><div class="card login-card"><div class="modal-heading"><div><span class="eyebrow">ÁREA INTERNA DO SIGLAB</span><h2>${testAuth?'Entrar no ambiente de teste':'Entrar com a conta IFMS'}</h2><p>${testAuth?'Acesso temporário para homologação dos perfis e setores.':'O acesso é liberado somente para técnicos ativos e vinculados a um setor.'}</p></div><button id="closeLogin" class="modal-close">×</button></div><form id="loginForm">${testAuth?'<label>E-mail de teste<input name="email" type="email" autocomplete="username" required></label><label>Senha temporária<input name="password" type="password" autocomplete="current-password" required></label>':''}<p id="loginError" class="login-error"></p><button class="google-auth-button" type="submit"><span aria-hidden="true">${testAuth?'T':'G'}</span> ${testAuth?'Entrar para teste':'Entrar com @ifms.edu.br'}</button></form></div></div>`);
   const loginModal=$('#loginModal');
   const loginIsRequired=()=>location.pathname.includes('/admin')||new URLSearchParams(location.search).get('route')==='admin';
   const openLogin=()=>{loginModal.hidden=false;document.body.classList.add('modal-open')};
@@ -84,7 +85,7 @@
     }
   };
   $('#closeLogin').onclick=()=>closeLogin();
-  $('#loginForm').onsubmit=async e=>{e.preventDefault();$('#loginError').textContent='';const button=e.submitter||e.target.querySelector('[type="submit"]');button.disabled=true;try{await window.siglabInstitutionalAuth.signIn(sitePath('admin/reservas'))}catch(error){button.disabled=false;button.innerHTML='<span aria-hidden="true">G</span> Entrar com @ifms.edu.br';$('#loginError').textContent=error?.message||'Não foi possível iniciar o login institucional.'}};
+  $('#loginForm').onsubmit=async e=>{e.preventDefault();$('#loginError').textContent='';const button=e.submitter||e.target.querySelector('[type="submit"]');button.disabled=true;try{if(testAuth){await window.siglabInstitutionalAuth.signInWithPassword(e.target.elements.email.value,e.target.elements.password.value);loginModal.hidden=true;document.body.classList.remove('modal-open');await enterAdmin()}else await window.siglabInstitutionalAuth.signIn(sitePath('admin/reservas'))}catch(error){button.disabled=false;button.innerHTML=`<span aria-hidden="true">${testAuth?'T':'G'}</span> ${testAuth?'Entrar para teste':'Entrar com @ifms.edu.br'}`;$('#loginError').textContent=error?.message||'Não foi possível iniciar o login institucional.'}};
 
   async function performLogout(){
     try {

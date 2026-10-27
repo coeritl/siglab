@@ -1,6 +1,7 @@
 (function(){
   const cfg=window.SIGLAB_SUPABASE||window.LABINFO_SUPABASE||{};
   if(!cfg.url||!cfg.anonKey||!window.supabase)return;
+  const testMode=cfg.testAuthEnabled===true;
 
   const siteBase=location.hostname.endsWith('.github.io')?'/siglab':'';
   const sitePath=route=>`${siteBase}/${route?String(route).replace(/^\/+|\/+$/g,'')+'/':''}`;
@@ -69,12 +70,24 @@
     if(error){clearReturn();throw error}
   }
 
+  async function signInWithPassword(email,password){
+    if(!testMode)throw new Error('O acesso temporário por senha está desativado.');
+    const normalizedEmail=String(email||'').trim().toLowerCase();
+    if(!/^siglab\.teste\.(admin|tecnico|servidor)@ifms\.edu\.br$/.test(normalizedEmail)){
+      throw new Error('Use uma das contas temporárias de homologação do SIGLAB.');
+    }
+    const {error}=await client.auth.signInWithPassword({email:normalizedEmail,password:String(password||'')});
+    if(error)throw new Error('Usuário ou senha de teste inválidos.');
+    return refresh();
+  }
+
   async function signOut(){await client.auth.signOut();clearReturn();await refresh()}
 
   function renderHeader(){
     const login=document.querySelector('#publicAuthButton');
     const session=document.querySelector('#publicSessionStatus');
     if(!login||!session)return;
+    if(testMode&&login.textContent.includes('@ifms.edu.br'))login.innerHTML='<span aria-hidden="true">T</span> Entrar para teste';
     login.hidden=Boolean(state.identity);
     session.hidden=!state.identity;
     if(state.identity){
@@ -83,8 +96,29 @@
     }
   }
 
-  window.siglabInstitutionalAuth={signIn,signOut,refresh,getState:snapshot,sitePath};
+  function openTestLogin(){
+    let modal=document.querySelector('#publicTestLoginModal');
+    if(!modal){
+      document.body.insertAdjacentHTML('beforeend',`<div id="publicTestLoginModal" class="modal-backdrop" hidden><div class="card login-card"><div class="modal-heading"><div><span class="eyebrow">AMBIENTE DE HOMOLOGAÇÃO</span><h2>Entrar com usuário de teste</h2><p>Use uma das contas temporárias definidas para validar o SIGLAB.</p></div><button class="modal-close" type="button" aria-label="Fechar">×</button></div><form><label>E-mail de teste<input name="email" type="email" autocomplete="username" required></label><label>Senha temporária<input name="password" type="password" autocomplete="current-password" required></label><p class="login-error" role="alert"></p><button class="primary" type="submit">Entrar no ambiente de teste</button></form></div></div>`);
+      modal=document.querySelector('#publicTestLoginModal');
+      const close=()=>{modal.hidden=true;document.body.classList.remove('modal-open')};
+      modal.querySelector('.modal-close').onclick=close;
+      modal.onclick=event=>{if(event.target===modal)close()};
+      modal.querySelector('form').onsubmit=async event=>{
+        event.preventDefault();
+        const form=event.currentTarget,errorBox=form.querySelector('.login-error'),button=form.querySelector('[type="submit"]');
+        errorBox.textContent='';button.disabled=true;
+        try{await signInWithPassword(form.elements.email.value,form.elements.password.value);form.reset();close()}
+        catch(error){errorBox.textContent=error?.message||'Não foi possível entrar.'}
+        finally{button.disabled=false}
+      };
+    }
+    modal.hidden=false;document.body.classList.add('modal-open');modal.querySelector('input')?.focus();
+  }
+
+  window.siglabInstitutionalAuth={signIn,signInWithPassword,signOut,refresh,getState:snapshot,sitePath,testMode};
   document.querySelector('#publicAuthButton')?.addEventListener('click',event=>{
+    if(testMode){openTestLogin();return}
     event.currentTarget.disabled=true;signIn(location.pathname+location.search).catch(error=>{
       event.currentTarget.disabled=false;alert(error?.message||'Nao foi possivel iniciar o login institucional.');
     });
