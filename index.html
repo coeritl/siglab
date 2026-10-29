@@ -8,7 +8,7 @@
     <title>SIGLAB | Gestão de Laboratórios</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="stylesheet" href="styles.css?v=3d78a93c00">
-    <link rel="stylesheet" href="siglab.css?v=8eb80a0b6c">
+    <link rel="stylesheet" href="siglab.css?v=8569b76169">
   </head>
   <body>
     <header class="topbar siglab-topbar">
@@ -122,11 +122,12 @@
       <section id="adminView" class="admin-view siglab-admin" hidden>
         <div class="admin-heading">
           <div><span class="eyebrow">ÁREA INTERNA</span><h1 id="adminTitle">Reservas dos laboratórios</h1><p id="adminSubtitle">Organize a agenda e analise as solicitações.</p></div>
-          <div class="admin-menu"><button id="adminMenuButton" class="secondary" type="button">Menu ▾</button><div id="adminMenuDropdown" class="menu-dropdown" hidden><button id="reservationsMenuButton" data-section="reservations" type="button">Reservas</button><button data-section="labs" type="button">Laboratórios</button><button data-section="servers" type="button">Servidores</button></div></div>
+          <div class="admin-menu"><button id="adminMenuButton" class="secondary" type="button">Menu ▾</button><div id="adminMenuDropdown" class="menu-dropdown" hidden><button id="reservationsMenuButton" data-section="reservations" type="button">Reservas</button><button data-section="labs" type="button">Laboratórios</button><button data-section="servers" type="button">Servidores</button><button id="masterMenuButton" data-section="master" type="button" hidden>Administração geral</button></div></div>
         </div>
         <section class="metrics siglab-admin-metrics" aria-label="Resumo das reservas"></section>
         <section id="labsSection" class="admin-section siglab-registry-section" hidden></section>
         <section id="serversSection" class="admin-section siglab-registry-section" hidden></section>
+        <section id="masterSection" class="admin-section" hidden></section>
       </section>
     </main>
 
@@ -141,8 +142,9 @@
     <footer><span>SIGLAB — Sistema Integrado de Gestão de Laboratórios</span><small>IFMS Campus Três Lagoas</small></footer>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js?v=d010cf8680"></script>
-    <script src="siglab-auth.js?v=70a782fbe2"></script>
-    <script src="siglab-app.js?v=41b97e7dd6"></script>
+    <script src="siglab-auth.js?v=68c84de6b7"></script>
+    <script src="siglab-app.js?v=ccfccef81c"></script>
     <script src="reservations.js?v=d5790bbe63"></script>
+    <script src="siglab-master.js?v=97ef0b6519"></script>
   </body>
 </html>

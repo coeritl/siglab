@@ -3,6 +3,21 @@
   --siglab-green-dark: #075c2e;
   --siglab-ink: #17211b;
 }
+.master-tabs { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; }
+.master-tabs .selected { background:var(--green); color:#fff; border-color:var(--green); }
+#masterSection .siglab-registry-list header p { color:var(--muted); font-size:12px; margin-bottom:0; }
+#masterSection .siglab-registry-list article { grid-template-columns:minmax(0,1fr) auto; }
+#masterSection .siglab-registry-list article span { white-space:normal; overflow-wrap:anywhere; }
+.master-form-actions { display:flex; flex-wrap:wrap; gap:9px; align-items:center; margin-top:20px; }
+.master-form-actions .primary { width:auto; margin:0; }
+#masterUserSectors { margin:18px 0; border:1px solid var(--line); border-radius:10px; padding:12px; }
+#masterUserSectors legend { padding:0 5px; font-size:13px; font-weight:700; }
+#masterMenuButton[hidden] { display:none; }
+@media(max-width:620px) {
+  .master-tabs .secondary { flex:1; min-height:44px; }
+  #masterSection .siglab-registry-grid { grid-template-columns:minmax(0,1fr); }
+  #masterSection .siglab-registry-form { padding:20px 16px; }
+}
 .siglab-session { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:10px; padding:14px; margin:0 auto 24px; }
 .siglab-session[hidden], #homeGoogleLogin[hidden] { display:none; }
 .siglab-session > span { color:var(--muted); font-size:12px; }

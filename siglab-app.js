@@ -92,7 +92,7 @@
     if (!sb) return null;
     await window.siglabAuthReady;
     const auth = window.siglabAuth.getState();
-    return auth.identity ? auth.staff : null;
+    return auth.staff || null;
   }
 
   async function requestAdmin() {
@@ -114,10 +114,14 @@
     $('.siglab-public-nav').hidden = true;
     $('#adminAccount').hidden = false;
     $('#adminIdentity strong').textContent = currentProfile.full_name || currentProfile.email;
-    $('#adminIdentity small').textContent = currentProfile.role === 'supervisor' ? 'Supervisão' : 'Equipe SIGLAB';
+    const master = currentProfile.is_admin === true;
+    $('#adminIdentity small').textContent = master ? 'Master · Administração geral' : 'Gestor de setor';
+    $('#masterMenuButton').hidden = !master;
+    $('#adminMenuDropdown [data-section="servers"]').hidden = true;
     history.pushState({}, '', sitePath('admin/reservas'));
     await window.labinfoReservationsReady;
-    await window.labinfoOpenReservations?.();
+    if (master && window.siglabMaster) await window.siglabMaster.open();
+    else await window.labinfoOpenReservations?.();
     window.scrollTo(0, 0);
   }
 
@@ -139,6 +143,8 @@
   }
 
   async function showAdminSection(section) {
+    if (section === 'master') return window.siglabMaster?.open();
+    if (section === 'servers') return window.siglabMaster?.open();
     if (section === 'reservations') return window.labinfoOpenReservations?.();
     hideAdminSections();
     const target = section === 'labs' ? $('#labsSection') : $('#serversSection');
@@ -260,14 +266,14 @@
   function renderInstitutionalSession() {
     const auth = window.siglabAuth.getState();
     if (!auth.staff && !$('#adminView').hidden) { currentProfile = null; setPublicView('home'); }
-    $('#homeGoogleLogin').hidden = Boolean(auth.identity);
+    $('#homeGoogleLogin').hidden = Boolean(auth.identity || auth.staff);
     let box = $('#siglabPublicSession');
     if (!box) {
       box = document.createElement('div'); box.id = 'siglabPublicSession'; box.className = 'card siglab-session';
       $('#homeGoogleLogin').after(box);
     }
     box.hidden = !auth.session;
-    box.innerHTML = auth.session ? `<strong>${safe(auth.identity?.full_name || 'Conta não habilitada')}</strong><span>${safe(auth.identity?.email || auth.session.user?.email)}</span>${auth.staff?'<button id="openStaffSession" class="secondary" type="button">Área interna</button>':''}<button id="endPublicSession" class="secondary" type="button">Sair</button>` : '';
+    box.innerHTML = auth.session ? `<strong>${safe(auth.identity?.full_name || auth.staff?.full_name || 'Conta não habilitada')}</strong><span>${safe(auth.identity?.email || auth.session.user?.email)}</span>${auth.staff?'<button id="openStaffSession" class="secondary" type="button">Área interna</button>':''}<button id="endPublicSession" class="secondary" type="button">Sair</button>` : '';
     $('#openStaffSession')?.addEventListener('click', requestAdmin);
     $('#endPublicSession')?.addEventListener('click', () => window.siglabAuth.signOut());
     $('#homeLoginError').textContent = auth.error || '';

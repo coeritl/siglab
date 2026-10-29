@@ -22,8 +22,8 @@
             state.error='Use sua conta Google institucional @ifms.edu.br.';await sb.auth.signOut();state.session=null;
           }else{
             const [identity,staff]=await Promise.all([sb.rpc('get_my_ifms_identity'),sb.rpc('get_my_staff_profile')]);
-            state.identity=identity.data?.[0]||null;state.staff=state.identity?staff.data?.[0]||null:null;
-            if(!state.identity)state.error=identity.error?.message||'Conta sem vínculo com servidor ativo no SIGLAB.';
+            state.identity=identity.data?.[0]||null;state.staff=staff.data?.[0]||null;
+            if(!state.identity&&!state.staff)state.error=identity.error?.message||'Conta sem vínculo com servidor ativo no SIGLAB.';
           }
         }
       }

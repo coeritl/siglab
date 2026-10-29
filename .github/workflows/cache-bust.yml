@@ -8,6 +8,7 @@ on:
       - 'siglab.css'
       - 'siglab-app.js'
       - 'siglab-auth.js'
+      - 'siglab-master.js'
       - 'reservations.js'
       - 'supabase-config.js'
       - 'scripts/bump-cache-version.mjs'
