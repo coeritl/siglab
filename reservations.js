@@ -586,7 +586,7 @@
     reservationLoadPromise=(async()=>{
     if(forceLookups||!adminLabs.length||!adminServers.length){
       const [{data:l,error:labsError},{data:s,error:serversError}]=await Promise.all([
-        sb.from('labs').select('id,name,code').eq('active',true).eq('reservation_enabled',true).order('name'),
+        sb.rpc('list_manageable_labs'),
         sb.from('servers').select('id,full_name,siape,email').eq('active',true).order('full_name')
       ]);
       if(labsError)throw labsError;if(serversError)throw serversError;

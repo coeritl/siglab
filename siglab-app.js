@@ -259,17 +259,19 @@
 
   function renderInstitutionalSession() {
     const auth = window.siglabAuth.getState();
+    if (!auth.staff && !$('#adminView').hidden) { currentProfile = null; setPublicView('home'); }
     $('#homeGoogleLogin').hidden = Boolean(auth.identity);
     let box = $('#siglabPublicSession');
     if (!box) {
       box = document.createElement('div'); box.id = 'siglabPublicSession'; box.className = 'card siglab-session';
       $('#homeGoogleLogin').after(box);
     }
-    box.hidden = !auth.identity;
-    box.innerHTML = auth.identity ? `<strong>${safe(auth.identity.full_name)}</strong><span>${safe(auth.identity.email)}</span>${auth.staff?'<button id="openStaffSession" class="secondary" type="button">Área interna</button>':''}<button id="endPublicSession" class="secondary" type="button">Sair</button>` : '';
+    box.hidden = !auth.session;
+    box.innerHTML = auth.session ? `<strong>${safe(auth.identity?.full_name || 'Conta não habilitada')}</strong><span>${safe(auth.identity?.email || auth.session.user?.email)}</span>${auth.staff?'<button id="openStaffSession" class="secondary" type="button">Área interna</button>':''}<button id="endPublicSession" class="secondary" type="button">Sair</button>` : '';
     $('#openStaffSession')?.addEventListener('click', requestAdmin);
     $('#endPublicSession')?.addEventListener('click', () => window.siglabAuth.signOut());
-    if (auth.error) { $('#homeLoginError').textContent = auth.error; $('#homeLoginError').hidden = false; }
+    $('#homeLoginError').textContent = auth.error || '';
+    $('#homeLoginError').hidden = !auth.error;
   }
   window.addEventListener('siglab:auth', renderInstitutionalSession);
   window.siglabAuthReady.then(() => {

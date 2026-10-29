@@ -7,6 +7,7 @@ on:
       - 'styles.css'
       - 'siglab.css'
       - 'siglab-app.js'
+      - 'siglab-auth.js'
       - 'reservations.js'
       - 'supabase-config.js'
       - 'scripts/bump-cache-version.mjs'
