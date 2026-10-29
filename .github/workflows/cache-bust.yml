@@ -9,6 +9,7 @@ on:
       - 'siglab-app.js'
       - 'siglab-auth.js'
       - 'siglab-master.js'
+      - 'siglab-users-csv.js'
       - 'reservations.js'
       - 'supabase-config.js'
       - 'scripts/bump-cache-version.mjs'

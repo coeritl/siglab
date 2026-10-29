@@ -49,7 +49,21 @@
       const q=$('#masterUserSearch').value.toLocaleLowerCase('pt-BR');
       $('#masterUserRows').innerHTML=data.users.filter(u=>(u.full_name+' '+u.email).toLocaleLowerCase('pt-BR').includes(q)).map(u=>`<article><div><strong>${esc(u.full_name)}</strong><span>${esc(u.email)} · ${roles[u.access_role]} · ${u.active?'Ativo':'Inativo'}</span><span>${esc((u.sector_ids||[]).map(id=>data.sectors.find(s=>s.id===id)?.name||'Setor indisponível').join(', '))}</span></div><button class="secondary" data-edit-user="${esc(u.email)}" type="button">Editar</button></article>`).join('')||'<p class="empty">Nenhuma conta encontrada.</p>';
       document.querySelectorAll('[data-edit-user]').forEach(b=>b.onclick=()=>{const u=data.users.find(x=>x.email===b.dataset.editUser);f.name.value=u.full_name;f.email.value=u.email;f.email.readOnly=true;f.siape.value=u.siape||'';f.role.value=u.access_role;f.active.checked=u.active;form.querySelectorAll('[name="sectors"]').forEach(c=>c.checked=(u.sector_ids||[]).includes(c.value));$('#userFormTitle').textContent='Editar acesso';changeRole();form.scrollIntoView({behavior:'smooth',block:'start'})});
+      decorateStatusActions();
     };$('#masterUserSearch').oninput=rows;rows();
+    window.siglabUsersCsv?.mount($('#masterContent'),data,open);
+    function decorateStatusActions(){
+    document.querySelectorAll('[data-edit-user]').forEach(edit=>{
+      const user=data.users.find(u=>u.email===edit.dataset.editUser),button=document.createElement('button');
+      button.type='button';button.className=user.active?'danger-button':'secondary';button.textContent=user.active?'Desativar':'Reativar';
+      button.onclick=async()=>{
+        if(!confirm(`${user.active?'Desativar':'Reativar'} o acesso de ${user.full_name}? O histórico e as reservas existentes serão preservados.`))return;
+        button.disabled=true;
+        try{const result=await db.rpc('master_save_access',{p_email:user.email,p_name:user.full_name,p_siape:user.siape,p_role:user.access_role,p_sectors:user.sector_ids||[],p_active:!user.active});if(result.error)throw result.error;window.toast('Situação do acesso atualizada.');await window.siglabAuth.refresh();if(allowed())await open()}
+        catch(e){window.toast(e.message);button.disabled=false}
+      };const actions=document.createElement('div');actions.className='master-user-actions';edit.replaceWith(actions);actions.append(edit,button);
+    });
+    }
   }
   function renderAudit(){
     $('#masterContent').innerHTML=`<section class="card siglab-registry-list"><header><h2>Histórico administrativo</h2><p>Últimas 50 alterações. Os valores anteriores e novos são preservados no banco; não podem ser apagados por este painel.</p></header>${data.audit.map(a=>`<article><div><strong>${esc(a.actor_email||'Configuração inicial')}</strong><span>${esc(new Date(a.created_at).toLocaleString('pt-BR',{timeZone:'America/Cuiaba'}))} · ${esc(a.action)} · ${esc(a.entity)}</span><span>${esc(a.record_key)}</span></div></article>`).join('')||'<p class="empty">Nenhuma alteração registrada.</p>'}</section>`;

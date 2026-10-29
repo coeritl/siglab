@@ -3,6 +3,23 @@
   --siglab-green-dark: #075c2e;
   --siglab-ink: #17211b;
 }
+.master-csv { margin-bottom:20px; overflow:hidden; }
+.master-csv > summary { cursor:pointer; padding:20px 24px; }
+.master-csv > summary span { display:block; margin-top:4px; color:var(--muted); font-size:12px; }
+.master-csv-body { padding:0 24px 24px; }
+.master-csv-body > p { color:var(--muted); font-size:13px; }
+.master-csv-body .primary { width:auto; }
+.master-csv-scroll { overflow:auto; max-height:380px; border:1px solid var(--line); border-radius:10px; }
+.master-csv table { width:100%; border-collapse:collapse; min-width:640px; font-size:12px; }
+.master-csv th,.master-csv td { padding:10px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+.master-csv th { position:sticky; top:0; background:#f1f6f3; }
+.master-csv td small { display:block; color:var(--muted); }
+.master-user-actions { display:flex; align-items:center; gap:8px; }
+.master-user-actions .danger-button { width:auto!important; }
+@media(max-width:620px) {
+  .master-csv-body { padding:0 16px 20px; }
+  .master-user-actions { flex-direction:column; align-items:stretch; }
+}
 .master-tabs { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; }
 .master-tabs .selected { background:var(--green); color:#fff; border-color:var(--green); }
 #masterSection .siglab-registry-list header p { color:var(--muted); font-size:12px; margin-bottom:0; }

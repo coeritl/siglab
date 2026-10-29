@@ -27,3 +27,15 @@ A migration bloqueia escrita direta nos cadastros de acesso/perfis/setores/servi
 5. Verificar auditoria após edição e saída/retorno da sessão.
 
 Não compartilhar credenciais nem colocar chaves secretas no código.
+
+## Importação CSV e desativação
+
+Em Usuários e perfis, abrir **Importar usuários por CSV** e baixar o modelo.
+Cabeçalho UTF-8: `nome;email;siape;perfil;setores;ativo`.
+Use `servidor`, `gestor` ou `master`; em `ativo`, `sim` ou `nao`.
+O campo `setores` usa os identificadores cadastrados separados por `|` e deve ficar vazio para servidor/master.
+SIAPE é texto, preservando zeros iniciais. Limites: 500 usuários por arquivo e 1 MB.
+
+A prévia mostra todas as linhas; erros bloqueiam o início da importação. Contas existentes são ignoradas por padrão. Para atualizá-las, marcar a opção específica; isso permite alterar nome, SIAPE, perfil, setores e situação. Masters e desativações exigem confirmação adicional. A própria conta autenticada não pode ser alterada por CSV: usar o cadastro manual.
+
+Cada linha é salva pela RPC auditada `master_save_access`, sem nova migration específica para o CSV. Falhas são apresentadas por linha, e sucessos anteriores são preservados. Após importar, clicar **Atualizar lista de usuários**. Os botões Desativar/Reativar também utilizam a mesma RPC: não excluem usuários, reservas ou histórico; desativar impede novas ações identificadas. A proteção do último master permanece no banco.
