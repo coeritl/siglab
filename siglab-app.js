@@ -19,7 +19,7 @@
   };
 
   const dbConfigured = Boolean(cfg.url && cfg.anonKey && window.supabase);
-  const sb = dbConfigured ? window.supabase.createClient(cfg.url, cfg.anonKey) : null;
+  const sb = window.siglabDb || (dbConfigured ? window.supabase.createClient(cfg.url, cfg.anonKey) : null);
   window.siglabDb = sb;
   window.labinfoDb = sb;
 
@@ -55,14 +55,7 @@
     button.disabled = true;
     try {
       if (!sb) throw new Error('Login institucional indisponível no momento.');
-      const { error } = await sb.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: new URL(sitePath(''), location.origin).href,
-          queryParams: { hd: 'ifms.edu.br', prompt: 'select_account' }
-        }
-      });
-      if (error) throw error;
+      await window.siglabAuth.signIn();
     } catch (error) {
       notice.textContent = 'Não foi possível iniciar o login Google IFMS. Verifique a configuração do provedor no Supabase.';
       notice.hidden = false;
@@ -79,7 +72,13 @@
   function openLogin() {
     loginModal.hidden = false;
     document.body.classList.add('modal-open');
-    setTimeout(() => $('#loginEmail').focus(), 40);
+    if (!$('#staffGoogleLogin')) {
+      const button = document.createElement('button');
+      button.id = 'staffGoogleLogin'; button.className = 'primary'; button.type = 'button';
+      button.textContent = 'Entrar com a conta Google IFMS';
+      button.onclick = () => window.siglabAuth.signIn(sitePath('admin/reservas')).catch(error => toast(error.message));
+      loginModal.querySelector('.siglab-login-card').append(button);
+    }
   }
   function closeLogin() {
     loginModal.hidden = true;
@@ -91,47 +90,21 @@
 
   async function getActiveProfile() {
     if (!sb) return null;
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) return null;
-    const { data: profile, error } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-    if (error || !profile?.active) {
-      await sb.auth.signOut();
-      return null;
-    }
-    return profile;
+    await window.siglabAuthReady;
+    const auth = window.siglabAuth.getState();
+    return auth.identity ? auth.staff : null;
   }
 
   async function requestAdmin() {
     if (!sb) return toast('A área interna será liberada após a configuração do banco exclusivo do SIGLAB.');
     currentProfile = await getActiveProfile();
-    if (!currentProfile) return openLogin();
+    if (!currentProfile) {
+      const auth = window.siglabAuth.getState();
+      if (auth.session) return toast(auth.error || 'Sua conta não possui acesso à área interna.');
+      return openLogin();
+    }
     await enterAdmin();
   }
-
-  $('#loginForm').onsubmit = async event => {
-    event.preventDefault();
-    const button = event.submitter;
-    button.disabled = true;
-    button.textContent = 'Entrando…';
-    $('#loginError').textContent = '';
-    try {
-      const { error } = await sb.auth.signInWithPassword({
-        email: $('#loginEmail').value.trim(),
-        password: $('#loginPassword').value
-      });
-      if (error) throw error;
-      currentProfile = await getActiveProfile();
-      if (!currentProfile) throw new Error('Usuário inativo ou sem perfil de acesso.');
-      closeLogin();
-      event.target.reset();
-      await enterAdmin();
-    } catch (error) {
-      $('#loginError').textContent = error.message === 'Invalid login credentials' ? 'E-mail ou senha inválidos.' : error.message;
-    } finally {
-      button.disabled = false;
-      button.textContent = 'Entrar';
-    }
-  };
 
   async function enterAdmin() {
     document.body.classList.add('admin-route');
@@ -149,7 +122,7 @@
   }
 
   $('#logoutButton').onclick = async () => {
-    if (sb) await sb.auth.signOut();
+    await window.siglabAuth.signOut();
     currentProfile = null;
     setPublicView('home');
     toast('Sessão encerrada.');
@@ -284,9 +257,27 @@
     else setPublicView('home', false);
   });
 
+  function renderInstitutionalSession() {
+    const auth = window.siglabAuth.getState();
+    $('#homeGoogleLogin').hidden = Boolean(auth.identity);
+    let box = $('#siglabPublicSession');
+    if (!box) {
+      box = document.createElement('div'); box.id = 'siglabPublicSession'; box.className = 'card siglab-session';
+      $('#homeGoogleLogin').after(box);
+    }
+    box.hidden = !auth.identity;
+    box.innerHTML = auth.identity ? `<strong>${safe(auth.identity.full_name)}</strong><span>${safe(auth.identity.email)}</span>${auth.staff?'<button id="openStaffSession" class="secondary" type="button">Área interna</button>':''}<button id="endPublicSession" class="secondary" type="button">Sair</button>` : '';
+    $('#openStaffSession')?.addEventListener('click', requestAdmin);
+    $('#endPublicSession')?.addEventListener('click', () => window.siglabAuth.signOut());
+    if (auth.error) { $('#homeLoginError').textContent = auth.error; $('#homeLoginError').hidden = false; }
+  }
+  window.addEventListener('siglab:auth', renderInstitutionalSession);
+  window.siglabAuthReady.then(() => {
+  renderInstitutionalSession();
   const params = new URLSearchParams(location.search);
   const route = params.get('route') || location.pathname.slice(siteBase.length).replace(/^\/+|\/+$/g, '');
   const reservationLink = ['confirm_reservation', 'cancel_reservation', 'manage_reservations', 'confirm_cancel_request'].some(key => params.has(key));
   if (route.startsWith('admin')) setTimeout(requestAdmin, 0);
   else if (route === 'reservas' || reservationLink) setTimeout(() => openReservations(params.get('grupo') || 'all'), 0);
+  });
 })();

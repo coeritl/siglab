@@ -12,6 +12,13 @@
         });
       }
       const val=client[prop];
+      if(prop==='rpc')return (name,args)=>{
+        if(name==='create_public_reservation_range'){
+          const {p_siape,...authenticatedArgs}=args;
+          return client.rpc('create_my_reservation_range',authenticatedArgs).then(result=>({...result,data:result.data&&!Array.isArray(result.data)?[result.data]:result.data}));
+        }
+        return client.rpc(name,args);
+      };
       return typeof val==='function'?val.bind(client):val;
     }
   });
@@ -333,9 +340,32 @@
   }
   if(myReservationsToggle&&myReservationsSide)myReservationsToggle.onclick=()=>toggleMyReservationsForm(myReservationsSide.hidden);
 
+  function renderReservationIdentity(){
+    const auth=window.siglabAuth?.getState();
+    publicServer=auth?.identity||null;
+    const field=$('#reservationSiape');field.type='hidden';field.required=false;
+    if(field.parentElement.tagName==='LABEL')field.parentElement.hidden=true;
+    field.value=publicServer?.siape||'';
+    $('#reservationIdentity').textContent=publicServer?`${publicServer.full_name} • ${publicServer.email}`:(auth?.error||'Entre com sua conta Google IFMS para solicitar reservas.');
+    let login=$('#reservationGoogleLogin');
+    if(!login){login=document.createElement('button');login.id='reservationGoogleLogin';login.type='button';login.className='secondary';login.textContent='Entrar com Google IFMS';$('#reservationIdentity').after(login);login.onclick=()=>window.siglabAuth.signIn(location.pathname+location.search).catch(e=>toast(e.message))}
+    login.hidden=Boolean(publicServer);
+    $('#reservationSearchSiape').closest('.protocol-search').hidden=true;
+    const description=$('#myReservationsSide .my-reservations > p');
+    if(description)description.textContent='As reservas vinculadas à sua sessão institucional aparecem automaticamente aqui.';
+    if(myReservationsSide&&!myReservationsSide.hidden)searchMyReservations();
+  }
+  window.addEventListener('siglab:auth',renderReservationIdentity);
+  window.siglabAuthReady?.then(renderReservationIdentity);
+  if(myReservationsToggle&&myReservationsSide)myReservationsToggle.onclick=async()=>{
+    toggleMyReservationsForm(myReservationsSide.hidden);
+    if(!myReservationsSide.hidden)await searchMyReservations();
+  };
+
   const publicNotice=$('#publicReservationNotice');
   function closePublicReservationNotice(){modal('publicReservationNotice',false)}
   function showPublicReservationNotice({type='info',eyebrow='ATENÇÃO',title,message,protocol=''}){
+    if(type==='success'){title='Reserva registrada';eyebrow='RESERVA AUTORIZADA';message='O horário foi reservado para sua conta institucional. Consulte os detalhes em Minhas reservas.'}
     publicNotice.dataset.type=type;
     $('#publicReservationNoticeIcon').textContent=type==='success'?'✓':'!';
     $('#publicReservationNoticeEyebrow').textContent=eyebrow;
@@ -353,6 +383,8 @@
   publicNotice.addEventListener('click',event=>{if(event.target===publicNotice)closePublicReservationNotice()});
   let identityTimer;
   $('#reservationSiape').oninput=()=>{clearTimeout(identityTimer);publicServer=null;if(!getDb()){$('#reservationIdentity').textContent='A validação será liberada após a configuração do banco do SIGLAB.';return}$('#reservationIdentity').textContent='Validando cadastro…';identityTimer=setTimeout(async()=>{const siape=$('#reservationSiape').value.trim();if(siape.length<5){$('#reservationIdentity').textContent='Digite seu SIAPE para validação.';return}const {data,error}=await sb.rpc('identify_server',{p_siape:siape});publicServer=data?.[0]||null;$('#reservationIdentity').textContent=error||!publicServer?'Servidor não localizado ou cadastro inativo.':`${publicServer.full_name} • ${publicServer.email}`;$('#reservationIdentity').className='field-hint '+(publicServer?'found':'pending')},350)};
+  $('#reservationSiape').oninput=()=>renderReservationIdentity();
+  $('#publicReservationForm').addEventListener('submit',()=>renderReservationIdentity(),true);
   $('#reservationDate').onchange=()=>{const date=new Date($('#reservationDate').value+'T12:00:00');if(date.getDay()===0){$('#reservationDate').value='';toast('Os laboratórios não recebem reservas aos domingos.')}};
   const selectPublicRecurrence=setupChoiceGroup('reservationRecurrence');$('#reservationRecurrence').onchange=()=>{const weekly=$('#reservationRecurrence').value==='weekly';$('#reservationUntilLabel').hidden=!weekly;$('#reservationUntil').required=weekly;$('#reservationUntil').min=$('#reservationDate').value};
   $('#publicReservationForm').onsubmit=async event=>{event.preventDefault();if(!getDb())return toast('O banco exclusivo do SIGLAB ainda não foi configurado.');if(!$('#reservationLab').value)return toast('Selecione um laboratório nos cards acima.');if(!publicServer)return toast('Valide um SIAPE cadastrado antes de continuar.');const startMinutes=timeMinutes($('#reservationTime').value),endMinutes=timeMinutes($('#reservationEndTime').value),duration=endMinutes-startMinutes;if(!Number.isFinite(duration)||duration<=0)return toast('O horário final deve ser posterior ao horário inicial.');if(duration<45||duration>360)return toast('A reserva deve ter entre 45 minutos e 6 horas.');const button=event.submitter;button.disabled=true;button.textContent='Registrando solicitação…';try{const recurrence=$('#reservationRecurrence').value,date=$('#reservationDate').value,{data,error}=await sb.rpc('create_public_reservation_range',{p_siape:$('#reservationSiape').value.trim(),p_lab:$('#reservationLab').value,p_subject:$('#reservationSubject').value.trim(),p_start:localIso(date,$('#reservationTime').value),p_end:localIso(date,$('#reservationEndTime').value),p_notes:$('#reservationNotes').value.trim()||null,p_recurrence:recurrence,p_until:recurrence==='weekly'?$('#reservationUntil').value:null});if(error)throw error;const protocol=data?.[0]?.protocol||'',selectedLab=$('#reservationLab').value;event.target.reset();$('#reservationLab').value=selectedLab;selectPublicRecurrence('none');$('#reservationUntilLabel').hidden=true;publicServer=null;$('#reservationIdentity').textContent='Digite seu SIAPE para validação.';showPublicReservationNotice({type:'success',eyebrow:'PEDIDO REGISTRADO',title:'Confirme sua reserva no e-mail',message:'Enviamos uma mensagem para o seu e-mail institucional. Abra essa mensagem e clique em “Confirmar reserva”. Somente depois dessa confirmação o pedido será encaminhado para aprovação da equipe técnica.',protocol})}catch(error){
@@ -374,29 +406,32 @@
       }
     }finally{button.disabled=false;button.innerHTML='Solicitar reserva <span>→</span>'}};
   async function searchMyReservations(){
-    const box=$('#myReservationsResult'),siape=$('#reservationSearchSiape').value.trim();
-    if(!getDb())return box.innerHTML='<p class="error-text">A consulta será liberada após a configuração do banco do SIGLAB.</p>';
-    if(siape.length<5)return box.innerHTML='<p class="error-text">Informe seu SIAPE.</p>';
-    box.innerHTML='<p class="empty">Preparando acesso seguro…</p>';
-    const {error}=await sb.rpc('request_reservation_access',{p_siape:siape});
-    box.innerHTML=error?`<p class="error-text">${safe(error.message)}</p>`:'<p class="reservation-access-sent"><strong>Verifique seu e-mail institucional.</strong><br>Se o SIAPE estiver ativo, o link de acesso seguro chegará em <strong>até 1 minuto</strong> e será válido por 30 minutos.</p>';
+    await window.siglabAuthReady;
+    const box=$('#myReservationsResult'),auth=window.siglabAuth.getState();
+    if(!auth.identity){
+      box.innerHTML=`<p>${safe(auth.error||'Entre com sua conta institucional para consultar suas reservas.')}</p><button class="secondary" id="myReservationsLogin" type="button">Entrar com Google IFMS</button>`;
+      $('#myReservationsLogin').onclick=()=>window.siglabAuth.signIn(location.pathname+location.search).catch(e=>toast(e.message));return;
+    }
+    await loadSecureReservations(null);
   }
   $('#searchReservations').onclick=searchMyReservations;$('#reservationSearchSiape').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();searchMyReservations()}};
 
   async function loadSecureReservations(token){
     const box=$('#myReservationsResult');box.innerHTML='<p class="empty">Carregando suas reservas…</p>';
-    const {data,error}=await sb.rpc('list_my_reservations_secure',{p_token:token});
+    const {data,error}=token?await sb.rpc('list_my_reservations_secure',{p_token:token}):await sb.rpc('list_my_reservations');
     if(error){box.innerHTML=`<p class="error-text">${safe(error.message)}</p>`;return}
     box.innerHTML=(data||[]).map(item=>{
       const recurring=Number(item.occurrence_count)>1;
       return `<article class="public-reservation-item secure-reservation-item" data-secure-reservation="${item.id}"><header><strong>${safe(item.protocol)}</strong><span class="reservation-status status-${normalize(item.status).replace(/\s/g,'-')}">${safe(item.status)}</span></header><h3>${safe(item.subject)}</h3><p>${safe(item.lab)} • ${localDate(item.starts_at)}, ${localTime(item.starts_at)}–${localTime(item.ends_at)}</p>${item.request_pending?'<small class="cancellation-pending">Cancelamento já solicitado</small>':`<button class="request-public-cancellation danger-button" type="button">Solicitar cancelamento</button><div class="public-cancellation-fields" hidden><label>Alcance<select class="public-cancellation-scope"><option value="occurrence">Somente esta ocorrência</option>${recurring?'<option value="future">Esta e as próximas</option><option value="series">Toda a série futura</option>':''}</select></label><label>Motivo <small>(opcional)</small><textarea class="public-cancellation-reason" rows="2" maxlength="500"></textarea></label><button class="confirm-public-cancellation primary" type="button">Enviar confirmação por e-mail</button></div>`}</article>`;
     }).join('')||'<p class="empty">Nenhuma reserva futura confirmada ou autorizada foi encontrada.</p>';
+    if(!token)box.querySelectorAll('.confirm-public-cancellation').forEach(button=>button.textContent='Solicitar cancelamento');
     box.querySelectorAll('.request-public-cancellation').forEach(button=>button.onclick=()=>{button.hidden=true;button.nextElementSibling.hidden=false});
     box.querySelectorAll('.confirm-public-cancellation').forEach(button=>button.onclick=async()=>{
       const card=button.closest('[data-secure-reservation]');button.disabled=true;button.textContent='Enviando…';
-      const {data:result,error:requestError}=await sb.rpc('request_reservation_cancellation',{p_access_token:token,p_reservation:card.dataset.secureReservation,p_scope:card.querySelector('.public-cancellation-scope').value,p_reason:card.querySelector('.public-cancellation-reason').value.trim()||null});
+      const common={p_reservation:card.dataset.secureReservation,p_scope:card.querySelector('.public-cancellation-scope').value,p_reason:card.querySelector('.public-cancellation-reason').value.trim()||null};
+      const {data:result,error:requestError}=token?await sb.rpc('request_reservation_cancellation',{p_access_token:token,...common}):await sb.rpc('request_my_reservation_cancellation',common);
       if(requestError){button.disabled=false;button.textContent='Enviar confirmação por e-mail';return toast(requestError.message)}
-      card.querySelector('.public-cancellation-fields').innerHTML=`<p class="reservation-access-sent"><strong>Confirme no e-mail.</strong><br>O pedido de cancelamento de ${safe(result?.[0]?.protocol||'sua reserva')} só chegará à equipe após sua confirmação.</p>`;
+      card.querySelector('.public-cancellation-fields').innerHTML=token?`<p class="reservation-access-sent"><strong>Confirme no e-mail.</strong><br>O pedido de cancelamento de ${safe(result?.[0]?.protocol||'sua reserva')} só chegará à equipe após sua confirmação.</p>`:'<p class="reservation-access-sent">Pedido identificado pela sua conta institucional e enviado para análise da equipe. A reserva permanece ativa até a decisão.</p>';
     });
   }
 

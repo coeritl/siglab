@@ -8,7 +8,7 @@
     <title>SIGLAB | Gestão de Laboratórios</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="stylesheet" href="styles.css?v=3d78a93c00">
-    <link rel="stylesheet" href="siglab.css?v=7c81774e98">
+    <link rel="stylesheet" href="siglab.css?v=577932e776">
   </head>
   <body>
     <header class="topbar siglab-topbar">
@@ -132,8 +132,8 @@
 
     <div id="loginModal" class="modal-backdrop" hidden>
       <div class="card login-card siglab-login-card" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-        <div class="modal-heading"><div><span class="eyebrow">ACESSO RESTRITO</span><h2 id="loginTitle">Entrar na área interna</h2><p>Use as credenciais da equipe responsável pelos laboratórios.</p></div><button id="closeLogin" class="modal-close" type="button" aria-label="Fechar">×</button></div>
-        <form id="loginForm"><label>E-mail<input id="loginEmail" type="email" autocomplete="username" required></label><label>Senha<input id="loginPassword" type="password" autocomplete="current-password" required></label><p id="loginError" class="login-error" role="alert"></p><button class="primary" type="submit">Entrar</button></form>
+        <div class="modal-heading"><div><span class="eyebrow">ACESSO RESTRITO</span><h2 id="loginTitle">Entrar na área interna</h2><p>Use sua conta Google IFMS vinculada à equipe responsável pelos laboratórios.</p></div><button id="closeLogin" class="modal-close" type="button" aria-label="Fechar">×</button></div>
+        <p id="loginError" class="login-error" role="alert"></p>
       </div>
     </div>
 
@@ -141,7 +141,8 @@
     <footer><span>SIGLAB — Sistema Integrado de Gestão de Laboratórios</span><small>IFMS Campus Três Lagoas</small></footer>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js?v=d010cf8680"></script>
-    <script src="siglab-app.js?v=ba7e657d47"></script>
-    <script src="reservations.js?v=228c5a2569"></script>
+    <script src="siglab-auth.js?v=70a782fbe2"></script>
+    <script src="siglab-app.js?v=9c90405e02"></script>
+    <script src="reservations.js?v=41be94009a"></script>
   </body>
 </html>

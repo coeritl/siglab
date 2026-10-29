@@ -3,6 +3,10 @@
   --siglab-green-dark: #075c2e;
   --siglab-ink: #17211b;
 }
+.siglab-session { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:10px; padding:14px; margin:0 auto 24px; }
+.siglab-session[hidden], #homeGoogleLogin[hidden] { display:none; }
+.siglab-session > span { color:var(--muted); font-size:12px; }
+.siglab-session .secondary { font-size:12px; padding:7px 11px; }
 
 .reservations-public-view #toggleMyReservationsForm { order: 3; margin: 0 0 14px; }
 .reservations-public-view #myReservationsSide { order: 3; margin: 0 0 14px; }
