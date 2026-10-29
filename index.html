@@ -8,7 +8,7 @@
     <title>SIGLAB | Gestão de Laboratórios</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="stylesheet" href="styles.css?v=3d78a93c00">
-    <link rel="stylesheet" href="siglab.css?v=69b3459f49">
+    <link rel="stylesheet" href="siglab.css?v=33226353b6">
   </head>
   <body>
     <header class="topbar siglab-topbar">
@@ -30,7 +30,8 @@
       <section id="homeView" class="home-view siglab-home">
         <div class="home-hero siglab-hero">
           <img class="siglab-home-logo" src="assets/laboratorios-logo.png" width="540" height="86" alt="Laboratórios TL">
-          <button id="homeGoogleLogin" class="siglab-google-login" type="button"><span aria-hidden="true">G</span>Fazer login com a Conta Google IFMS</button>
+          <button id="homeGoogleLogin" class="siglab-google-login" type="button" aria-describedby="googleLoginHint"><img src="assets/google-g.svg" width="20" height="20" alt="">Entrar com Google</button>
+          <small id="googleLoginHint" class="siglab-login-hint">Use sua conta institucional @ifms.edu.br</small>
           <p id="homeLoginError" class="login-error" role="alert" hidden></p>
           <h1>Qual Laboratório você quer reservar?</h1>
         </div>
