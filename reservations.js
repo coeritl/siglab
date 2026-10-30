@@ -426,14 +426,29 @@
       const recurring=Number(item.occurrence_count)>1;
       return `<article class="public-reservation-item secure-reservation-item" data-secure-reservation="${item.id}"><header><strong>${safe(item.protocol)}</strong><span class="reservation-status status-${normalize(item.status).replace(/\s/g,'-')}">${safe(item.status)}</span></header><h3>${safe(item.subject)}</h3><p>${safe(item.lab)} • ${localDate(item.starts_at)}, ${localTime(item.starts_at)}–${localTime(item.ends_at)}</p>${item.request_pending?'<small class="cancellation-pending">Cancelamento já solicitado</small>':`<button class="request-public-cancellation danger-button" type="button">Solicitar cancelamento</button><div class="public-cancellation-fields" hidden><label>Alcance<select class="public-cancellation-scope"><option value="occurrence">Somente esta ocorrência</option>${recurring?'<option value="future">Esta e as próximas</option><option value="series">Toda a série futura</option>':''}</select></label><label>Motivo <small>(opcional)</small><textarea class="public-cancellation-reason" rows="2" maxlength="500"></textarea></label><button class="confirm-public-cancellation primary" type="button">Enviar confirmação por e-mail</button></div>`}</article>`;
     }).join('')||'<p class="empty">Nenhuma reserva futura confirmada ou autorizada foi encontrada.</p>';
-    if(!token)box.querySelectorAll('.confirm-public-cancellation').forEach(button=>button.textContent='Solicitar cancelamento');
+    if(!token){
+      box.querySelectorAll('.request-public-cancellation').forEach(button=>button.textContent='Cancelar reserva');
+      box.querySelectorAll('.confirm-public-cancellation').forEach(button=>{
+        button.textContent='Confirmar cancelamento';
+        button.insertAdjacentHTML('beforebegin','<p>Ao confirmar, os horários selecionados serão liberados imediatamente. Não é necessária aprovação da equipe.</p><button class="abort-public-cancellation secondary" type="button">Manter reserva</button>');
+      });
+      box.querySelectorAll('.abort-public-cancellation').forEach(button=>button.onclick=()=>{
+        const card=button.closest('[data-secure-reservation]');card.querySelector('.public-cancellation-fields').hidden=true;card.querySelector('.request-public-cancellation').hidden=false;
+      });
+    }
     box.querySelectorAll('.request-public-cancellation').forEach(button=>button.onclick=()=>{button.hidden=true;button.nextElementSibling.hidden=false});
     box.querySelectorAll('.confirm-public-cancellation').forEach(button=>button.onclick=async()=>{
       const card=button.closest('[data-secure-reservation]');button.disabled=true;button.textContent='Enviando…';
       const common={p_reservation:card.dataset.secureReservation,p_scope:card.querySelector('.public-cancellation-scope').value,p_reason:card.querySelector('.public-cancellation-reason').value.trim()||null};
-      const {data:result,error:requestError}=token?await sb.rpc('request_reservation_cancellation',{p_access_token:token,...common}):await sb.rpc('request_my_reservation_cancellation',common);
-      if(requestError){button.disabled=false;button.textContent='Enviar confirmação por e-mail';return toast(requestError.message)}
-      card.querySelector('.public-cancellation-fields').innerHTML=token?`<p class="reservation-access-sent"><strong>Confirme no e-mail.</strong><br>O pedido de cancelamento de ${safe(result?.[0]?.protocol||'sua reserva')} só chegará à equipe após sua confirmação.</p>`:'<p class="reservation-access-sent">Pedido identificado pela sua conta institucional e enviado para análise da equipe. A reserva permanece ativa até a decisão.</p>';
+      const {data:result,error:requestError}=token?await sb.rpc('request_reservation_cancellation',{p_access_token:token,...common}):await sb.rpc('cancel_my_reservation',common);
+      if(requestError){button.disabled=false;button.textContent=token?'Enviar confirmação por e-mail':'Confirmar cancelamento';return toast(requestError.message)}
+      if(!token){
+        await loadSecureReservations(null);
+        await loadPublicSchedule();
+        toast('Reserva cancelada. O horário foi liberado na agenda.');
+        return;
+      }
+      card.querySelector('.public-cancellation-fields').innerHTML=`<p class="reservation-access-sent"><strong>Confirme no e-mail.</strong><br>O pedido de cancelamento de ${safe(result?.[0]?.protocol||'sua reserva')} só chegará à equipe após sua confirmação.</p>`;
     });
   }
 
