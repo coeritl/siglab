@@ -54,13 +54,27 @@
     target.insertAdjacentHTML('afterbegin',`<details class="card master-csv"><summary><strong>Importar usuários por CSV</strong><span>Modelo, prévia e validação antes de salvar</span></summary><div class="master-csv-body"><p>Colunas: <code>nome;email;siape;perfil;setores;ativo</code>. Use servidor, gestor ou master. Em setores, informe identificadores separados por <code>|</code>. Preserve zeros iniciais do SIAPE como texto. Máximo: 500 usuários e 1 MB.</p><button class="secondary" id="downloadUsersCsv" type="button">Baixar modelo CSV</button><label>Arquivo CSV UTF-8<input id="usersCsvFile" type="file" accept=".csv,text/csv"></label><label class="siglab-check"><input id="csvUpdateExisting" type="checkbox"><span>Atualizar também as contas existentes (inclusive perfil, setores e situação)</span></label><label class="siglab-check"><input id="csvConfirmSensitive" type="checkbox"><span>Autorizo os perfis master e as desativações indicadas na prévia</span></label><div id="usersCsvPreview" aria-live="polite"></div><p id="usersCsvProgress" role="status"></p><button class="primary" id="importUsersCsv" type="button" disabled>Confirmar importação</button><button class="secondary" id="finishUsersCsv" type="button" hidden>Atualizar lista de usuários</button></div></details>`);
     const $=s=>target.querySelector(s);let rows=[],busy=false,generation=0;
     $('#downloadUsersCsv').onclick=()=>{const url=URL.createObjectURL(new Blob(['\uFEFFnome;email;siape;perfil;setores;ativo\r\n'],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='modelo-usuarios-siglab.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+    const chosenRows=()=>rows.filter(r=>r.selected!==false&&(!r.existing||$('#csvUpdateExisting').checked));
+    $('#usersCsvPreview').onchange=event=>{
+      const control=event.target.closest('[data-csv-row]');
+      if(!control||busy)return;
+      const row=rows[Number(control.dataset.csvRow)];
+      if(!row)return;
+      row.selected=control.checked;
+      preview();
+    };
     function preview(){
-      const chosen=rows.filter(r=>!r.existing||$('#csvUpdateExisting').checked),invalid=rows.filter(r=>r.errors.length),sensitive=chosen.some(r=>r.args.p_role==='master'||!r.args.p_active);
-      $('#usersCsvPreview').innerHTML=`<p><strong>${chosen.length} para importar</strong> · ${rows.length-chosen.length} existentes ignorados · ${invalid.length} com erros</p><div class="master-csv-scroll"><table><thead><tr><th>Linha</th><th>Usuário</th><th>Perfil / situação</th><th>Resultado da validação</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.line}</td><td>${esc(r.args.p_name)}<small>${esc(r.email)}</small></td><td>${esc(r.args.p_role)} · ${r.args.p_active?'Ativo':'Inativo'}</td><td>${esc(r.errors.join('; ')||(r.existing?($('#csvUpdateExisting').checked?'Atualizar existente':'Ignorar existente'):'Novo cadastro'))}</td></tr>`).join('')}</tbody></table></div>`;
+      $('#usersCsvConfirmation').hidden=true;
+      const chosen=chosenRows(),invalid=chosen.filter(r=>r.errors.length),sensitive=chosen.some(r=>r.args.p_role==='master'||!r.args.p_active);
+      const excluded=rows.filter(r=>r.selected===false).length;
+      const ignored=rows.filter(r=>r.selected!==false&&r.existing&&!$('#csvUpdateExisting').checked).length;
+      const scroll=$('#usersCsvPreview').querySelector?.('.master-csv-scroll')?.scrollTop||0;
+      $('#usersCsvPreview').innerHTML=`<p><strong>${chosen.length} selecionado(s) para importar</strong> · ${excluded} desmarcado(s) · ${ignored} existentes ignorados · ${invalid.length} selecionado(s) com erros</p><p>Desmarque as linhas que não deseja importar. Linhas selecionadas com erro bloqueiam a confirmação.</p><div class="master-csv-scroll"><table><thead><tr><th>Importar</th><th>Linha</th><th>Usuário</th><th>Perfil / situação</th><th>Resultado da validação</th></tr></thead><tbody>${rows.map((r,index)=>`<tr><td><input type="checkbox" data-csv-row="${index}" aria-label="Importar linha ${r.line}: ${esc(r.args.p_name)}" ${r.selected!==false?'checked':''}></td><td>${r.line}</td><td>${esc(r.args.p_name)}<small>${esc(r.email)}</small></td><td>${esc(r.args.p_role)} · ${r.args.p_active?'Ativo':'Inativo'}</td><td>${esc(r.errors.join('; ')||(r.existing?($('#csvUpdateExisting').checked?'Atualizar existente':'Ignorar existente'):'Novo cadastro'))}</td></tr>`).join('')}</tbody></table></div>`;
+      const scroller=$('#usersCsvPreview').querySelector?.('.master-csv-scroll');if(scroller)scroller.scrollTop=scroll;
       $('#importUsersCsv').disabled=busy||!chosen.length||invalid.length>0||(sensitive&&!$('#csvConfirmSensitive').checked);
     }
     $('#usersCsvFile').onchange=async()=>{
-      const current=++generation;rows=[];$('#importUsersCsv').disabled=true;$('#usersCsvPreview').textContent='';
+      const current=++generation;rows=[];$('#importUsersCsv').disabled=true;$('#usersCsvPreview').textContent='';$('#usersCsvConfirmation').hidden=true;
       const file=$('#usersCsvFile').files[0];if(!file)return;
       try{if(file.size>1048576)throw new Error('Arquivo maior que 1 MB.');const text=await file.text();if(current!==generation)return;rows=validate(text,data,window.siglabAuth.getState().session?.user?.email);preview()}
       catch(e){if(current===generation)$('#usersCsvPreview').textContent=e.message}
@@ -71,14 +85,15 @@
     $('#cancelUsersCsv').onclick=()=>{$('#usersCsvConfirmation').hidden=true;preview()};
     $('#importUsersCsv').onclick=()=>{
       if(busy||$('#importUsersCsv').disabled)return;
-      const chosen=rows.filter(r=>!r.existing||$('#csvUpdateExisting').checked);
+      const chosen=chosenRows();
       $('#usersCsvConfirmationText').textContent=`Importar ${chosen.length} usuário(s)? Contas existentes só serão alteradas se a opção de atualização estiver marcada.`;
       $('#usersCsvConfirmation').hidden=false;
       $('#usersCsvConfirmation').scrollIntoView({behavior:'smooth',block:'nearest'});
     };
     $('#executeUsersCsv').onclick=async()=>{
       if(busy||$('#importUsersCsv').disabled)return;
-      const chosen=rows.filter(r=>!r.existing||$('#csvUpdateExisting').checked);
+      const chosen=chosenRows();
+      if(!chosen.length||chosen.some(r=>r.errors.length)){preview();return;}
       $('#usersCsvConfirmation').hidden=true;
       busy=true;const controls=[...document.querySelectorAll('#masterSection button,#masterSection input,#masterSection select')];controls.forEach(c=>c.disabled=true);
       let success=0,failures=[];

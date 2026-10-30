@@ -49,3 +49,24 @@ test('confirma importação na própria página e chama a RPC sem janela nativa'
   assert.equal(calls[0].name,'master_save_access');
   assert.match(node('#usersCsvProgress').textContent,/1 salvo\(s\), 0 falha/);
 });
+test('desmarcar linha com conflito libera somente os demais cadastros',async()=>{
+  const nodes=new Map();
+  const node=id=>{if(!nodes.has(id))nodes.set(id,{disabled:false,hidden:true,checked:false,files:[],insertAdjacentHTML(){},scrollIntoView(){}});return nodes.get(id)};
+  const target={insertAdjacentHTML(){},querySelector:node};const calls=[];
+  const browserWindow={siglabAuth:{getState:()=>({session:{user:{email:'master@ifms.edu.br'}}})},siglabDb:{rpc:async(name,args)=>{calls.push(args);return {error:null}}}};
+  vm.runInNewContext(code,{window:browserWindow,document:{querySelectorAll:()=>[...nodes.values()]}});
+  browserWindow.siglabUsersCsv.mount(target,data,()=>{});
+  node('#usersCsvFile').files=[{size:200,text:async()=>header+'Maria;maria@ifms.edu.br;0012345;servidor;;sim\nConflito;outra@ifms.edu.br;77777;servidor;;sim'}];
+  await node('#usersCsvFile').onchange();
+  assert.equal(node('#importUsersCsv').disabled,true);
+  const select=checked=>node('#usersCsvPreview').onchange({target:{closest:()=>({dataset:{csvRow:'1'},checked})}});
+  select(false);
+  assert.equal(node('#importUsersCsv').disabled,false);
+  select(true);
+  assert.equal(node('#importUsersCsv').disabled,true);
+  select(false);
+  node('#importUsersCsv').onclick();
+  await node('#executeUsersCsv').onclick();
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].p_email,'maria@ifms.edu.br');
+});
