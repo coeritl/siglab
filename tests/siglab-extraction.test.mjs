@@ -34,8 +34,8 @@ test('a página inicial separa Informática, Eletrotécnica e laboratórios dive
 });
 
 test('a identidade visual usa a marca Laboratórios TL fornecida', async () => {
-  const [html, logo] = await Promise.all([read('index.html'), read('assets/laboratorios-logo.png')]);
-  assert.match(html, /assets\/laboratorios-logo\.png/);
+  const [html, logo] = await Promise.all([read('index.html'), read('assets/laboratorios-logo-20261030.png')]);
+  assert.match(html, /assets\/laboratorios-logo-20261030\.png/);
   assert.doesNotMatch(html, /class="siglab-wordmark"|class="siglab-home-wordmark"/);
   assert.ok(logo.length > 1000);
 });

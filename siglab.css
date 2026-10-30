@@ -3,6 +3,15 @@
   --siglab-green-dark: #075c2e;
   --siglab-ink: #17211b;
 }
+/* Enquadramento visual da arte original, sem modificar o arquivo fornecido. */
+img.siglab-header-logo,
+#homeView img.siglab-home-logo {
+  aspect-ratio: 540 / 86;
+  height: auto;
+  object-fit: cover;
+  object-position: center 50.5%;
+  mix-blend-mode: multiply;
+}
 .master-csv { margin-bottom:20px; overflow:hidden; }
 .master-csv > summary { cursor:pointer; padding:20px 24px; }
 .master-csv > summary span { display:block; margin-top:4px; color:var(--muted); font-size:12px; }
