@@ -142,7 +142,7 @@
   }
 
   function applyPublicLabGroup(){
-    publicLabs=allPublicLabs.filter(publicLabMatchesGroup);
+    publicLabs=window.siglabOrderLabs(allPublicLabs.filter(publicLabMatchesGroup));
     const content=publicGroupContent();
     setText('#publicReservationTitle',content.title);
     setText('#publicReservationSubtitle',content.subtitle);
@@ -592,7 +592,7 @@
         sb.from('servers').select('id,full_name,siape,email').eq('active',true).order('full_name')
       ]);
       if(labsError)throw labsError;if(serversError)throw serversError;
-      adminLabs=l||[];adminServers=s||[];
+      adminLabs=window.siglabOrderLabs(l);adminServers=s||[];
       fillAdminOptions();
     }
     await Promise.all([loadCalendarReservations(),loadPendingReservations(),loadCancellationRequests(),loadReservationHistory(),loadReservationStats()]);

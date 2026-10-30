@@ -177,6 +177,7 @@
       sb.from('sectors').select('id,name,slug').eq('active', true).eq('reservation_mode', 'internal').order('sort_order').order('name')
     ]);
     if (error || sectorsError) return section.innerHTML = `<div class="card siglab-error">${safe((error || sectorsError).message)}</div>`;
+    labs.splice(0,labs.length,...window.siglabOrderLabs(labs));
     const sectorOptions = (sectors || []).map(sector => `<option value="${sector.id}">${safe(sector.name)}</option>`).join('');
     section.innerHTML = `
       <div class="siglab-registry-grid">
