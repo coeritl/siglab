@@ -67,10 +67,19 @@
     };
     $('#csvUpdateExisting').onchange=preview;$('#csvConfirmSensitive').onchange=preview;
     $('#finishUsersCsv').onclick=reload;
-    $('#importUsersCsv').onclick=async()=>{
+    $('#importUsersCsv').insertAdjacentHTML('afterend','<div id="usersCsvConfirmation" class="linked-notice" hidden><p id="usersCsvConfirmationText"></p><button id="executeUsersCsv" class="primary" type="button">Sim, iniciar importação</button><button id="cancelUsersCsv" class="secondary" type="button">Voltar à prévia</button></div>');
+    $('#cancelUsersCsv').onclick=()=>{$('#usersCsvConfirmation').hidden=true;preview()};
+    $('#importUsersCsv').onclick=()=>{
       if(busy||$('#importUsersCsv').disabled)return;
       const chosen=rows.filter(r=>!r.existing||$('#csvUpdateExisting').checked);
-      if(!confirm(`Importar ${chosen.length} usuário(s)? Contas existentes só serão alteradas se a opção de atualização estiver marcada.`))return;
+      $('#usersCsvConfirmationText').textContent=`Importar ${chosen.length} usuário(s)? Contas existentes só serão alteradas se a opção de atualização estiver marcada.`;
+      $('#usersCsvConfirmation').hidden=false;
+      $('#usersCsvConfirmation').scrollIntoView({behavior:'smooth',block:'nearest'});
+    };
+    $('#executeUsersCsv').onclick=async()=>{
+      if(busy||$('#importUsersCsv').disabled)return;
+      const chosen=rows.filter(r=>!r.existing||$('#csvUpdateExisting').checked);
+      $('#usersCsvConfirmation').hidden=true;
       busy=true;const controls=[...document.querySelectorAll('#masterSection button,#masterSection input,#masterSection select')];controls.forEach(c=>c.disabled=true);
       let success=0,failures=[];
       try{for(let i=0;i<chosen.length;i++){

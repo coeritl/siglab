@@ -32,3 +32,20 @@ test('marca contas existentes e conflito de SIAPE antes de gravar',()=>{
   assert.ok(validate(header+'Maria;existente@ifms.edu.br;77777;servidor;;sim',data)[0].existing);
   assert.ok(validate(header+'Maria;outra@ifms.edu.br;77777;servidor;;sim',data)[0].errors.some(e=>e.includes('outra conta')));
 });
+test('confirma importação na própria página e chama a RPC sem janela nativa',async()=>{
+  const nodes=new Map();
+  const node=id=>{if(!nodes.has(id))nodes.set(id,{disabled:false,hidden:true,checked:false,files:[],insertAdjacentHTML(){},scrollIntoView(){}});return nodes.get(id)};
+  const target={insertAdjacentHTML(){},querySelector:node};let calls=[];
+  const browserWindow={siglabAuth:{getState:()=>({session:{user:{email:'master@ifms.edu.br'}}})},siglabDb:{rpc:async(name,args)=>{calls.push({name,args});return {error:null}}}};
+  vm.runInNewContext(code,{window:browserWindow,document:{querySelectorAll:()=>[...nodes.values()]}});
+  browserWindow.siglabUsersCsv.mount(target,data,()=>{});
+  node('#usersCsvFile').files=[{size:100,text:async()=>header+'Maria;maria@ifms.edu.br;0012345;servidor;;sim'}];
+  await node('#usersCsvFile').onchange();
+  node('#importUsersCsv').onclick();
+  assert.equal(node('#usersCsvConfirmation').hidden,false);
+  assert.equal(calls.length,0);
+  await node('#executeUsersCsv').onclick();
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].name,'master_save_access');
+  assert.match(node('#usersCsvProgress').textContent,/1 salvo\(s\), 0 falha/);
+});
