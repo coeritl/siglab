@@ -101,7 +101,12 @@
     if (!currentProfile) {
       const auth = window.siglabAuth.getState();
       if (auth.session) return toast(auth.error || 'Sua conta não possui acesso à área interna.');
-      return openLogin();
+      try {
+        await window.siglabAuth.signIn(sitePath('admin/reservas'));
+      } catch (error) {
+        toast(error.message || 'Não foi possível iniciar o login Google IFMS.');
+      }
+      return;
     }
     await enterAdmin();
   }
