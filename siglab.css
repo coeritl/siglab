@@ -430,6 +430,56 @@ body:has(#homeView:not([hidden]))::before {
 }
 
 .siglab-login-card h2 { margin: 5px 0; }
+#publicReservationNotice[hidden] { display: none !important; }
+#publicReservationNotice:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+  background: rgba(7,35,20,.56);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+}
+#publicReservationNotice .public-reservation-notice {
+  position: relative;
+  width: min(540px,100%);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  margin: auto;
+  padding: 38px 30px 30px;
+  border-radius: 20px;
+  flex: 0 1 540px;
+}
+#publicReservationNotice .modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #f0f5f2;
+  color: #365345;
+  font-size: 24px;
+  cursor: pointer;
+}
+#publicReservationNotice .public-reservation-notice-icon { margin-top: 12px; }
+#publicReservationNotice .primary { width: 100%; }
+@media (max-width: 620px) {
+  #publicReservationNotice:not([hidden]) { padding: 16px; }
+  #publicReservationNotice .public-reservation-notice {
+    min-height: 0;
+    max-height: calc(100dvh - 32px);
+    padding: 42px 22px 24px;
+  }
+}
 .login-error { min-height: 20px; color: var(--red); font-size: 12px; }
 .admin-route .siglab-topbar .siglab-brand { display: flex; }
 .admin-route .siglab-topbar { background: #fff; }

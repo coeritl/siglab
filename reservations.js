@@ -363,6 +363,8 @@
   };
 
   const publicNotice=$('#publicReservationNotice');
+  // O diálogo não participa do grid nem das dimensões da agenda.
+  document.body.append(publicNotice);
   function closePublicReservationNotice(){modal('publicReservationNotice',false)}
   function showPublicReservationNotice({type='info',eyebrow='ATENÇÃO',title,message,protocol=''}){
     if(type==='success'){title='Reserva registrada';eyebrow='RESERVA AUTORIZADA';message='O horário foi reservado para sua conta institucional. Consulte os detalhes em Minhas reservas.'}
@@ -374,7 +376,7 @@
     const protocolBox=$('#publicReservationNoticeProtocol');
     protocolBox.hidden=!protocol;
     protocolBox.textContent=protocol?`Protocolo: ${protocol}`:'';
-    $('#confirmPublicReservationNotice').textContent=type==='success'?'Entendi, vou confirmar no e-mail':'Voltar e escolher outro horário';
+    $('#confirmPublicReservationNotice').textContent=type==='success'?'Entendido':'Voltar e escolher outro horário';
     modal('publicReservationNotice',true);
     setTimeout(()=>$('#confirmPublicReservationNotice').focus(),50);
   }
